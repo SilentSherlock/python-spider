@@ -19,10 +19,12 @@ class DiceRollerApp:
 
         # Create turtle for drawing
         self.t = turtle.RawTurtle(self.screen)
+        self.t.shape("turtle")
+        self.t.hideturtle()
 
         # Create separator lines
         # self.canvas.create_line(160, 0, 160, 400, fill="gray", width=2)
-        self.canvas.create_line(0, 0, 240, 400, fill="gray", width=2)
+        # self.canvas.create_line(0, 0, 240, 400, fill="gray", width=2)
 
         # Create labels and text boxes
         self.topic_label = ttk.Label(root, text="Topic")
