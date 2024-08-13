@@ -2,16 +2,18 @@ import tkinter as tk
 from tkinter import ttk
 import turtle
 import random
+from PIL import Image, ImageTk, ImageSequence
+import rolling_stone
 
 
 class DiceRollerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Dice Roller App")
+        self.root.title("Dice Roller")
 
         # Create canvas for turtle
         self.canvas = tk.Canvas(root, width=400, height=400)
-        self.canvas.grid(row=0, column=0, rowspan=3)
+        self.canvas.grid(row=0, column=0, rowspan=5)
 
         # Create turtle screen
         self.screen = turtle.TurtleScreen(self.canvas)
@@ -22,9 +24,13 @@ class DiceRollerApp:
         self.t.shape("turtle")
         self.t.hideturtle()
 
-        # Create separator lines
-        # self.canvas.create_line(160, 0, 160, 400, fill="gray", width=2)
-        # self.canvas.create_line(0, 0, 240, 400, fill="gray", width=2)
+        # Create gif resource
+        image_src = Image.open("../../resource/image/diceRollingByFa.gif")
+        self.frames = []
+        for frame in ImageSequence.Iterator(image_src):
+            self.frames.append(ImageTk.PhotoImage(frame))
+        self.canvas_image = self.canvas.create_image(-200, -200, anchor=tk.NW, image=self.frames[0])
+        self.canvas_image_flag = False
 
         # Create labels and text boxes
         self.topic_label = ttk.Label(root, text="Topic")
@@ -37,59 +43,36 @@ class DiceRollerApp:
         self.activity_entry = ttk.Entry(root)
         self.activity_entry.grid(row=1, column=2)
 
-        # Create start button
-        self.start_button = ttk.Button(root, text="Start", command=self.start_roll)
+        # Create start and accept button, start for roll, accept for change image
+        self.start_button = ttk.Button(root, text="Start Rolling", command=self.start_roll)
         self.start_button.grid(row=2, column=1, columnspan=2)
+        self.accept_button = ttk.Button(root, text="Accept")
+        self.accept_button.grid(row=3, column=1, columnspan=2)
 
         # Draw initial stick figure with dice
-        self.draw_stick_figure()
-        self.draw_dice(1)
+        self.draw_star_figure()
 
-    def draw_stick_figure(self):
-        self.t.penup()
-        self.t.goto(-100, 0)
-        self.t.pendown()
-        self.t.circle(20)  # Head
-        self.t.penup()
-        self.t.goto(-100, -20)
-        self.t.pendown()
-        self.t.goto(-100, -100)  # Body
-        self.t.goto(-120, -140)  # Left leg
-        self.t.penup()
-        self.t.goto(-100, -100)
-        self.t.pendown()
-        self.t.goto(-80, -140)  # Right leg
-        self.t.penup()
-        self.t.goto(-100, -60)
-        self.t.pendown()
-        self.t.goto(-120, -40)  # Left arm
-        self.t.penup()
-        self.t.goto(-100, -60)
-        self.t.pendown()
-        self.t.goto(-80, -40)  # Right arm
-        self.t.penup()
-        self.t.goto(-100, 20)
-        self.t.pendown()
-        self.t.circle(5)  # Smile
-
-    def draw_dice(self, number):
-        self.t.penup()
-        self.t.goto(-100, 40)
-        self.t.pendown()
-        self.t.write(f"Dice: {number}", align="center", font=("Arial", 16, "normal"))
+    def draw_star_figure(self, angle=0):
+        # Draw Slogan
+        return
 
     def start_roll(self):
         self.t.clear()
-        self.draw_stick_figure()
+        self.canvas_image_flag = True
+        self.load_image()
         for _ in range(10):
-            number = random.randint(1, 6)
-            self.draw_dice(number)
             self.screen.update()
             self.screen.ontimer(lambda: None, 100)
         self.topic_entry.delete(0, tk.END)
         self.activity_entry.delete(0, tk.END)
-        self.topic_entry.insert(0, f"Topic: {number}")
-        self.activity_entry.insert(0, f"Activity: {number}")
+        self.topic_entry.insert(0, "fuck")
+        self.activity_entry.insert(0, "shit")
+        self.canvas_image_flag = False
+
+    def load_image(self, frame_index=0):
+        if self.canvas_image_flag:
+            self.canvas.itemconfig(self.canvas_image, image=self.frames[frame_index])
+            self.root.after(100, self.load_image, (frame_index + 1) % len(self.frames))
 
 
 def main():
