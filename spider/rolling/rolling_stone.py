@@ -18,7 +18,7 @@ activities = [
     ["冥想", ["进行冥想练习", "练习深呼吸", "参加冥想工作坊", "学习瑜伽冥想", "进行正念练习"]]
 ]
 
-random_topic = random.choice(activities)
-random_activity = random.choice(random_topic[1])
-print(f"本周的随机主题是：{random_topic[0]}")
-print(f"具体活动是：{random_activity}")
+# random_topic = random.choice(activities)
+# random_activity = random.choice(random_topic[1])
+# print(f"本周的随机主题是：{random_topic[0]}")
+# print(f"具体活动是：{random_activity}")

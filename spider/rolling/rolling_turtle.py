@@ -1,3 +1,4 @@
+import math
 import tkinter as tk
 from tkinter import ttk, font
 import turtle
@@ -6,13 +7,29 @@ from PIL import Image, ImageTk, ImageSequence
 import rolling_stone
 
 
+def turtle_run(cur_turtle):
+    length = 400
+    cur_turtle.showturtle()
+    cur_turtle.pendown()
+    cur_turtle.forward(length)
+    cur_turtle.right(180)
+
+
+def calculate_center(outer_width, outer_height, inner_width, inner_height):
+    x = (outer_width - inner_width) // 2
+    y = (outer_height - inner_height) // 2
+    return x, y
+
+
 class DiceRollerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Dice Roller")
 
         # Create canvas for turtle
-        self.canvas = tk.Canvas(root, width=400, height=400)
+        self.width = 400
+        self.height = 400
+        self.canvas = tk.Canvas(root, width=self.width, height=self.height)
         self.canvas.grid(row=0, column=0, rowspan=5)
 
         # Create turtle screen
@@ -20,15 +37,26 @@ class DiceRollerApp:
         self.screen.bgcolor("white")
 
         # Create turtle for drawing
-        self.t = turtle.RawTurtle(self.screen)
-        self.t.shape("turtle")
-        self.t.color()
+        self.green_turtle = turtle.RawTurtle(self.screen)
+        self.green_turtle.hideturtle()
+        self.green_turtle.shape("turtle")
+        self.green_turtle.color("Green")
+        self.green_turtle.penup()
+        self.green_turtle.goto(-200, -70)
+        self.red_turtle = turtle.RawTurtle(self.screen)
+        self.red_turtle.hideturtle()
+        self.red_turtle.shape("turtle")
+        self.red_turtle.color("Red")
+        self.red_turtle.penup()
+        self.red_turtle.goto(200, -150)
+        self.red_turtle.right(180)
 
         # Create gif resource
         image_src = Image.open("../../resource/image/diceRollingByFa.gif")
         self.frames = []
         for frame in ImageSequence.Iterator(image_src):
             self.frames.append(ImageTk.PhotoImage(frame))
+        # x, y = calculate_center(self.width, self.height, image_src.width, image_src.height)
         self.canvas_image = self.canvas.create_image(-200, -200, anchor=tk.NW, image=self.frames[0])
         self.canvas_image_flag = False
 
@@ -60,24 +88,31 @@ class DiceRollerApp:
         # print(font.families())
 
     def start_roll(self):
-        self.t.clear()
+        self.green_turtle.clear()
         self.canvas_image_flag = True
         self.load_image()
+        turtle_run(self.green_turtle)
+        turtle_run(self.red_turtle)
         for _ in range(10):
             self.screen.update()
             self.screen.ontimer(lambda: None, 100)
         self.topic_entry.delete(0, tk.END)
         self.activity_entry.delete(0, tk.END)
-        self.topic_entry.insert(0, "fuck")
-        self.activity_entry.insert(0, "shit")
+        random_topic = random.choice(rolling_stone.activities)
+        random_activity = random.choice(random_topic[1])
+        self.topic_entry.insert(0, random_topic[0])
+        self.activity_entry.insert(0, random_activity)
         self.canvas_image_flag = False
 
     def accept_roll(self):
-        image_accept = Image.open("../../resource/image/clapFa.gif_s200x0")
+        image_accept = Image.open("../../resource/image/clapFa.gif")
         image_accept_frames = []
         for frame in ImageSequence.Iterator(image_accept):
             image_accept_frames.append(ImageTk.PhotoImage(frame))
         self.frames = image_accept_frames
+        self.canvas_image_flag = True
+        self.canvas.coords(self.canvas_image, -90, -170)
+        self.load_image()
 
     def load_image(self, frame_index=0):
         if self.canvas_image_flag:
