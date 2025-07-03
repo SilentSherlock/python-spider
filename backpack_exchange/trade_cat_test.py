@@ -1,14 +1,11 @@
-import os
-
 import sol_volume_brush
 from backpack_exchange_sdk.authenticated import AuthenticationClient
 from backpack_exchange_sdk.public import PublicClient
+from backpack_exchange.trade_prepare import proxy_on, load_api_keys
 
-# 在代码中设置全局代理
-os.environ['HTTP_PROXY'] = 'http://127.0.0.1:10809'
-os.environ['HTTPS_PROXY'] = 'http://127.0.0.1:10809'
+proxy_on()
 
-api_key, secret_key = sol_volume_brush.load_api_keys()
+api_key, secret_key = load_api_keys()
 client = AuthenticationClient(public_key=api_key, secret_key=secret_key)
 public = PublicClient()
 

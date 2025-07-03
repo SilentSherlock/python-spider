@@ -2,16 +2,7 @@ import time
 import random
 from backpack_exchange_sdk.authenticated import AuthenticationClient
 from backpack_exchange_sdk.public import PublicClient
-
-
-# 从本地文件读取 API Key 和 Secret
-def load_api_keys(path="C:\\Users\\15361\\OneDrive\\文档\\finance\\TradeCat.txt"):
-    with open(path, "r") as f:
-        lines = f.read().splitlines()
-    api_key = lines[0].strip()
-    secret_key = lines[1].strip()
-    return api_key, secret_key
-
+from backpack_exchange.trade_prepare import load_api_keys
 
 # 初始化客户端
 api_key, secret_key = load_api_keys()
