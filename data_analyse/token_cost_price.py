@@ -2,7 +2,7 @@
 import pandas as pd
 
 # 读取excel
-file_path = "D:/files/finance/欧易统一交易账单：2024-04-08~2025-04-08~UTC+8~369342.xlsx"
+file_path = "D:/files/finance/欧易统一交易账单_2024-06-09.xlsx"
 df = pd.read_excel(file_path)
 
 # 选择需要的列
@@ -15,7 +15,7 @@ df.columns = df.columns.str.strip()  # 去除空格
 print(df.columns.tolist())
 # 过滤数据
 filtered_df = df[
-    (df['交易单位'].isin(target_units)) &
+    (df['交易单位'].isin(target_units)) &       
     (df['交易类型'].isin(deal_type))
 ].copy()
 
