@@ -19,7 +19,7 @@ if __name__ == '__main__':
     ticker = public.get_ticker("SOL_USDC")
     print(f"SOL_USDC Ticker: {ticker.get('lastPrice')}")
     bid_price = round(float(ticker.get("lastPrice")) * 0.75, 2)
-    ask_price = round(float(ticker.get("lastPrice")) * 1.5, 2)
+    ask_price = round(float(ticker.get("lastPrice")) * 1.25, 2)
     print(f"Bid Price: {bid_price}, Ask Price: {ask_price}")
     order = client.execute_order(
         orderType=OrderType.LIMIT,
