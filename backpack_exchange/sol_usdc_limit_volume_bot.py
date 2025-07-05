@@ -17,8 +17,8 @@ MIN_ORDER_USD = 30
 MAX_ORDER_USD = 50
 SLIPPAGE = 0.0001  # 0.01%
 CHECK_INTERVAL = 5  # 秒
-MAX_WAIT_COUNT = 8  # 最多轮询8次（大约40秒）
-TEST_FLAG = True  # 是否为测试模式
+MAX_WAIT_COUNT = 10  # 最多轮询10次（大约40秒）
+TEST_FLAG = False  # 是否为测试模式
 
 
 def get_last_price():
@@ -70,6 +70,18 @@ def place_limit_order_test(price, qty, side):
     return {"id": str(random.randint(100000, 999999)), "status": "PENDING"}
 
 
+def place_market_order(quantity, side):
+    """执行吃单（市价单）"""
+    print(f"吃{side}市价单: 数量={quantity}")
+    return client.execute_order(
+        orderType=OrderType.MARKET,
+        side=OrderSide.BID if side == "BUY" else OrderSide.ASK,
+        symbol=SYMBOL,
+        quantity=str(quantity),
+        timeInForce=TimeInForce.IOC
+    )
+
+
 def wait_for_fill(order_id):
     for attempt in range(MAX_WAIT_COUNT):
         fills = client.get_fill_history(orderId=order_id, symbol=SYMBOL)
@@ -86,7 +98,7 @@ def wait_for_fill(order_id):
 def wait_for_fill_test(order_id):
     """以随机形式返回true或者false，true和false的比例大概为100:1"""
     for attempt in range(MAX_WAIT_COUNT):
-        if random.random() < 0.99:  # 99%概率成交
+        if random.random() < 0.5:  # 99%概率成交
             print(f"订单已成交: {order_id}")
             return True
         print(f"等待成交中...({attempt + 1}/{MAX_WAIT_COUNT})")
@@ -102,25 +114,30 @@ def run_volume_loop():
         print("已有0-50U挂单，先取消所有挂单")
         cancel_all_orders()
 
+    filled = True
     while True:
         try:
             # 买卖交替进行
-            filled = True
             for side in ["BUY", "SELL"]:
                 if not filled:
                     print(f"上一个订单未成交，跳过{side}操作")
                     filled = True
                     continue
                 last_price = get_last_price()
-                base_price = round(last_price * (1 - SLIPPAGE), 2) if side == "BUY" \
-                    else round(last_price * (1 + SLIPPAGE), 2)
-                # base_price = base_price if side == "SELL" else base_price - 0.01
+                low_price = round(last_price * (1 - SLIPPAGE), 2)
+                high_price = round(last_price * (1 + SLIPPAGE), 2)
+                # base_price = low_price
+                base_price = low_price if side == "BUY" else last_price
 
                 usd_value = round(random.uniform(MIN_ORDER_USD, MAX_ORDER_USD), 2)
-                quantity = round(usd_value / base_price, 4)
+                quantity = round(usd_value / base_price, 2)
 
                 if not TEST_FLAG:
-                    order = place_limit_order(base_price, quantity, side)
+                    # 挂单买入，吃单卖出
+                    if side == "SELL":
+                        order = place_market_order(quantity, side)
+                    else:
+                        order = place_limit_order(base_price, quantity, side)
                 else:
                     order = place_limit_order_test(base_price, quantity, side)
                 order_id = order.get("id")
