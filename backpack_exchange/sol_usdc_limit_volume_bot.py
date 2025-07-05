@@ -194,6 +194,7 @@ if __name__ == "__main__":
     for _ in range(2):
         t = threading.Thread(target=run_volume_loop, name=f"VolumeThread-{_ + 1}")
         t.start()
+        time.sleep(5)  # 每5S启动一个线程
         threads.append(t)
 
     for t in threads:
