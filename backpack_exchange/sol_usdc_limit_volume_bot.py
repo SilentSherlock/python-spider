@@ -1,5 +1,6 @@
 import random
 import time
+import threading
 from backpack_exchange_sdk.authenticated import AuthenticationClient
 from backpack_exchange_sdk.public import PublicClient
 from enums.RequestEnums import OrderType, OrderSide, TimeInForce, MarketType
@@ -107,6 +108,31 @@ def wait_for_fill_test(order_id):
     return False
 
 
+def check_balance(price, quantity, side):
+    """检查账户余额是否足够，足够，返回交易方向，不足够，返回False"""
+    balances = client.get_balances()
+    sol_balance = float(balances.get("SOL", {}).get("available", 0))
+    usdc_balance = float(balances.get("USDC", {}).get("available", 0))
+    usdc_need = round(price * quantity, 2)
+    sol_need = round(quantity, 2)
+
+    # sol的量和usdc的量均不足以进行交易
+    if sol_need > sol_balance and usdc_need > usdc_balance:
+        print(f"账户余额不足: SOL={sol_balance}, USDC={usdc_balance}, 需要: SOL={sol_need}, USDC={usdc_need}")
+        return False
+
+    # 买入或卖出均满足
+    if side == "BUY" and usdc_need <= usdc_balance:
+        print(f"账户余额足够进行买入: USDC={usdc_balance}, 需要={usdc_need}")
+        return "BUY"
+    if side == "SELL" and sol_need <= sol_balance:
+        print(f"账户余额足够进行卖出: SOL={sol_balance}, 需要={sol_need}")
+        return "SELL"
+
+    # 买入或卖出不满足，进行反向交易
+    return "SELL" if side == "BUY" else "BUY"
+
+
 def run_volume_loop():
     # 预检查是否已有挂单在30-50U之间
     orders = get_open_orders()
@@ -133,11 +159,16 @@ def run_volume_loop():
                 quantity = round(usd_value / base_price, 2)
 
                 if not TEST_FLAG:
-                    # 挂单买入，吃单卖出
-                    if side == "SELL":
-                        order = place_market_order(quantity, side)
+                    # 交易之前先判断当前单是否有足够流动性进行
+                    check_result = check_balance(base_price, quantity, side)
+                    if not check_result:
+                        print("账户余额不足，结束线程")
+                        return
+                        # 挂单买入，吃单卖出
+                    if check_result == "SELL":
+                        order = place_market_order(quantity, check_result)
                     else:
-                        order = place_limit_order(base_price, quantity, side)
+                        order = place_limit_order(base_price, quantity, check_result)
                 else:
                     order = place_limit_order_test(base_price, quantity, side)
                 order_id = order.get("id")
@@ -158,4 +189,12 @@ def run_volume_loop():
 
 
 if __name__ == "__main__":
-    run_volume_loop()
+
+    threads = []
+    for _ in range(2):
+        t = threading.Thread(target=run_volume_loop, name=f"VolumeThread-{_ + 1}")
+        t.start()
+        threads.append(t)
+
+    for t in threads:
+        t.join()
