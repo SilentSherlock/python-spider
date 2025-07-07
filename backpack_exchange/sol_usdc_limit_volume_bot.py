@@ -181,7 +181,7 @@ def run_volume_loop():
                     filled = wait_for_fill(order_id)
                 else:
                     filled = wait_for_fill_test(order_id)
-                time.sleep(random.randint(5, 8))  # 成交后等待
+                time.sleep(random.uniform(6, 10))  # 成交后等待
 
         except Exception as e:
             print(f"发生异常: {e}")
@@ -194,7 +194,7 @@ if __name__ == "__main__":
     for _ in range(2):
         t = threading.Thread(target=run_volume_loop, name=f"VolumeThread-{_ + 1}")
         t.start()
-        time.sleep(5)  # 每5S启动一个线程
+        time.sleep(random.uniform(8, 15))  # 随机等待8，15s
         threads.append(t)
 
     for t in threads:
