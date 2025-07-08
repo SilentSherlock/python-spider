@@ -3,6 +3,7 @@ import requests
 from datetime import datetime, timedelta
 
 from backpack_exchange_sdk.authenticated import AuthenticationClient
+from backpack_exchange_sdk.public import PublicClient
 from okx import Account, Trade, Funding, MarketData, PublicData
 
 from backpack_exchange.trade_prepare import proxy_on, load_backpack_api_keys, load_okx_api_keys
@@ -13,6 +14,7 @@ OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE = load_okx_api_keys()
 BACKPACK_API_KEY, BACKPACK_SECRET_KEY = load_backpack_api_keys()
 
 backpack_client = AuthenticationClient(BACKPACK_API_KEY, BACKPACK_SECRET_KEY)
+backpack_public = PublicClient()
 okx_live_trading = "0"
 okx_account_api = Account.AccountAPI(
     OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, False, okx_live_trading)
@@ -21,16 +23,27 @@ okx_funding_api = Funding.FundingAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE
 okx_public_api = PublicData.PublicAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, False, okx_live_trading)
 
 # === 套利参数设置 ===
+# 合约标的映射：OKX 合约 -> Backpack 合约
+
+SYMBOL_MAP = {
+    "BTC-USDT-SWAP": "BTC_USDC_PERP",
+    "ETH-USDT-SWAP": "ETH_USDC_PERP",
+    "SOL-USDT-SWAP": "SOL_USDC_PERP",
+    "SUI-USDT-SWAP": "SUI_USDC_PERP",
+    "XRP-USDT-SWAP": "XRP_USDC_PERP",
+    "DOGE-USDT-SWAP": "DOGE_USDC_PERP",
+    "KAITO-USDT-SWAP": "KAITO_USDC_PERP",
+}
 OKX_SYMBOL = "SOL-USDT-SWAP"  # OKX 的永续合约标识（示例）
 BACKPACK_SYMBOL = "SOL_USDC_PERP"  # Backpack 标识
 THRESHOLD_DIFF = 0.0015  # 资金费率差套利阈值（0.15%）
 MAX_ORDER_USD = 1000  # 每次套利的最大 USD 头寸
 MAX_LEVERAGE = 5  # 最大杠杆倍数
-SETTLEMENT_WINDOW_MIN = 5  # 资金费率结算前几分钟内允许操作
+SETTLEMENT_WINDOW_MIN = 15  # 资金费率结算前几分钟内允许操作
 
 
 # === 工具函数 ===
-# 获取 OKX 资金费率,结算时间,下次结算时间
+# 获取 OKX 标的资金费率,结算时间,下次结算时间
 def get_okx_funding_rate(public_api, symbol):
     funding_info = public_api.get_funding_rate(symbol)
 
@@ -49,25 +62,72 @@ def get_okx_funding_rate(public_api, symbol):
 
     return rate, funding_time, next_funding_time
 
-
-def get_backpack_funding_rate(client, symbol):
+# 获取 Backpack 标的资金费率
+def get_backpack_funding_rate(public, symbol):
 
     # backpack以区间形式返回最近的资金费率，limit设置为1，代表最新的一条
-    resp = client.get_funding_interval_rates(symbol=symbol, limit=1)
+    resp = public.get_funding_interval_rates(symbol=symbol, limit=1)
     if not resp:
         raise Exception("无法获取 Backpack 资金费率信息")
     print(f"Backpack 资金费率响应: {resp}")
     rate = float(resp["fundingRate"])
-    intervalEndTimestamp = resp["intervalEndTimestamp"]  # backpack返回的是上次结算后的本地时间2025-07-08T16:00:00
+    interval_end_timestamp = resp["intervalEndTimestamp"]  # backpack返回的是上次结算后的本地时间2025-07-08T16:00:00
     # 可选：打印信息
-    print(f"Backpack 资金费率: {rate:.4%}, 结算时间: {intervalEndTimestamp}")
-    return rate, intervalEndTimestamp
+    print(f"Backpack 资金费率: {rate:.4%}, 结算时间: {interval_end_timestamp}")
+    return rate, interval_end_timestamp
 
-
+# 判断当前时间是否在交易窗口内
 def within_funding_window(next_funding_time, window_minutes):
     now = datetime.utcnow()
     return 0 <= (next_funding_time - now).total_seconds() <= window_minutes * 60
 
+# 计算两个交易所的资金费率差，并计算年化收益并给标的排序def calculate_funding_rate_diff():
+def calculate_funding_rate_diff():
+    results = []
+    for okx_symbol, backpack_symbol in SYMBOL_MAP.items():
+        try:
+            okx_rate, funding_time, next_funding_time = get_okx_funding_rate(okx_public_api, okx_symbol)
+            backpack_rate, _ = get_backpack_funding_rate(backpack_public, backpack_symbol)
+            diff = okx_rate - backpack_rate
+            # 资金费率通常8小时结算一次，年化=单次费率*3*365
+            annualized = abs(diff) * 3 * 365
+            # 计算方向
+            okx_action, backpack_action = ("short", "long")
+            if okx_rate >= 0 > backpack_rate:
+                okx_action, backpack_action = ("short", "long")
+            elif okx_rate < 0 <= backpack_rate:
+                okx_action, backpack_action = ("long", "short")
+            elif okx_rate > backpack_rate >= 0:
+                okx_action, backpack_action = ("short", "long")
+            elif okx_rate < backpack_rate <= 0:
+                okx_action, backpack_action = ("long", "short")
+            elif backpack_rate > okx_rate >= 0:
+                okx_action, backpack_action = ("long", "short")
+            elif backpack_rate < okx_rate <= 0:
+                okx_action, backpack_action = ("short", "long")
+            else:
+                okx_action, backpack_action = ("hold", "hold")
+
+            results.append({
+                "okx_symbol": okx_symbol,
+                "backpack_symbol": backpack_symbol,
+                "okx_rate": okx_rate,
+                "backpack_rate": backpack_rate,
+                "diff": diff,
+                "annualized": annualized,
+                "next_funding_time": funding_time,
+                "okx_action": okx_action,
+                "backpack_action": backpack_action
+            })
+        except Exception as e:
+            print(f"获取{okx_symbol}资金费率失败: {e}")
+    # 按年化收益降序排序
+    results.sort(key=lambda x: x["annualized"], reverse=True)
+    for r in results:
+        print(
+            f"{r['okx_symbol']} <-> {r['backpack_symbol']}: 差值={r['diff']:.4%}, 年化={r['annualized']:.2%}, OKX={r['okx_rate']:.4%}, Backpack={r['backpack_rate']:.4%}"
+            f", OKX操作={r['okx_action']}, Backpack操作={r['backpack_action']}, 下次结算时间={r['next_funding_time']}")
+    return results
 
 def execute_okx_order(OKX_SYMBOL, side, qty):
     print(f"[模拟下单] OKX {side} {qty} {OKX_SYMBOL}")
@@ -89,10 +149,7 @@ def arbitrage_loop():
             print(
                 f"[{datetime.utcnow().isoformat()}] OKX 资金费率: {okx_rate:.4%}, Backpack 价格: {backpack_price}, 下次结算: {next_time}")
 
-            if backpack_price is None:
-                print("Backpack 获取价格失败，跳过...\n")
-                time.sleep(10)
-                continue
+            # 计算资金费率差
 
             if abs(okx_rate) >= THRESHOLD_DIFF and within_funding_window(next_time, SETTLEMENT_WINDOW_MIN):
                 usd_value = min(MAX_ORDER_USD, backpack_price * 10)  # 简单头寸控制
