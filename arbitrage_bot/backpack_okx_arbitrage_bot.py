@@ -19,7 +19,7 @@ okx_account_api = Account.AccountAPI(
 okx_trade_api = Trade.TradeAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, False, okx_live_trading)
 
 # === 用户参数设置 ===
-OKX_SYMBOL = "SOL_USDT-SWAP"  # OKX 的永续合约标识（示例）
+OKX_SYMBOL = "SOL-USDT-SWAP"  # OKX 的永续合约标识（示例）
 BACKPACK_OKX_SYMBOL = "SOL_USDC_PERP"  # Backpack 标识
 THRESHOLD_DIFF = 0.0015  # 资金费率差套利阈值（0.15%）
 MAX_ORDER_USD = 1000  # 每次套利的最大 USD 头寸
