@@ -5,11 +5,11 @@ from backpack_exchange_sdk.authenticated import AuthenticationClient
 from backpack_exchange_sdk.public import PublicClient
 from enums.RequestEnums import OrderType, OrderSide, TimeInForce, MarketType
 
-from backpack_exchange.trade_prepare import proxy_on, load_api_keys
+from backpack_exchange.trade_prepare import proxy_on, load_backpack_api_keys
 
 proxy_on()
 
-public_key, secret_key = load_api_keys()
+public_key, secret_key = load_backpack_api_keys()
 client = AuthenticationClient(public_key, secret_key)
 public = PublicClient()
 

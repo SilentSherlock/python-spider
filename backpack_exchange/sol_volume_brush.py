@@ -2,10 +2,10 @@ import time
 import random
 from backpack_exchange_sdk.authenticated import AuthenticationClient
 from backpack_exchange_sdk.public import PublicClient
-from backpack_exchange.trade_prepare import load_api_keys
+from backpack_exchange.trade_prepare import load_backpack_api_keys
 
 # 初始化客户端
-api_key, secret_key = load_api_keys()
+api_key, secret_key = load_backpack_api_keys()
 client = AuthenticationClient(public_key=api_key, secret_key=secret_key)
 public = PublicClient()
 
