@@ -1,8 +1,7 @@
-from enums.RequestEnums import OrderType, OrderSide, TimeInForce
-
-import sol_volume_brush
 from backpack_exchange_sdk.authenticated import AuthenticationClient
 from backpack_exchange_sdk.public import PublicClient
+
+from arbitrage_bot.backpack_okx_arbitrage_bot import get_backpack_funding_rate
 from backpack_exchange.trade_prepare import proxy_on, load_backpack_api_keys
 
 proxy_on()
@@ -18,6 +17,10 @@ if __name__ == '__main__':
     # 获取SOL标的当前标记价格
     ticker = public.get_ticker("SOL_USDC")
     print(f"SOL_USDC Ticker: {ticker.get('lastPrice')}")
+    # 获取资金费率
+    funding_rate = get_backpack_funding_rate(public, "SOL_USDC_PERP")
+
+
     # bid_price = round(float(ticker.get("lastPrice")) * 0.75, 2)
     # ask_price = round(float(ticker.get("lastPrice")) * 1.25, 2)
     # print(f"Bid Price: {bid_price}, Ask Price: {ask_price}")
