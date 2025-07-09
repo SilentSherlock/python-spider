@@ -40,8 +40,8 @@ SYMBOL_MAP = {
 OKX_SYMBOL = "SOL-USDT-SWAP"  # OKX 的永续合约标识（示例）
 BACKPACK_SYMBOL = "SOL_USDC_PERP"  # Backpack 标识
 THRESHOLD_DIFF_Y = 0.1  # 资金费率差套利阈值年化（10%）
-MAX_ORDER_USD = 1000  # 每次套利的最大 USD 头寸
-MAX_LEVERAGE = 5  # 最大杠杆倍数
+MAX_ORDER_USD = 5  # 每次套利的最大 USD 头寸
+MAX_LEVERAGE = 2  # 最大杠杆倍数
 SETTLEMENT_WINDOW_MIN = 15  # 资金费率结算前几分钟内允许操作
 
 
@@ -87,7 +87,9 @@ def get_backpack_funding_rate(public, symbol):
 # 判断当前时间是否在交易窗口内
 def within_funding_window(next_funding_time, window_minutes):
     now = datetime.now()
-    return 0 <= (next_funding_time - now).total_seconds() <= window_minutes * 60
+    result = 0 <= int((next_funding_time - now).total_seconds()) <= window_minutes * 60
+    print(f"当前时间在交易窗口内: {result}, 下次结算时间: {next_funding_time}, 当前时间: {now}")
+    return result
 
 
 # 计算两个交易所的资金费率差，并计算年化收益并给标的排序
@@ -340,7 +342,7 @@ def arbitrage_loop():
 
     while True:
         try:
-            print("\n==== 开始断判深度契约资金费率契约奖励 ====")
+            print("\n==== 开始资金费率套利程序 ====")
             now = datetime.now()
 
             if not is_open:
@@ -348,10 +350,10 @@ def arbitrage_loop():
                 # 筛选最大差值并且要求资金费率差大于阈值，无 hold，并在窗口期内
                 for r in results:
                     if (
-                            r["annualized"] >= THRESHOLD_DIFF_Y
+                            float(r["annualized"]) >= float(THRESHOLD_DIFF_Y)
                             and r["okx_action"] != "hold"
                             and r["backpack_action"] != "hold"
-                            and within_funding_window(datetime.fromtimestamp(r["next_funding_time"] / 1000),
+                            and within_funding_window(datetime.fromtimestamp(int(r["next_funding_time"]) / 1000),
                                                       SETTLEMENT_WINDOW_MIN)
                     ):
                         # 执行开仓前准备工作
@@ -367,12 +369,15 @@ def arbitrage_loop():
                         price = (okx_price + backpack_price) / 2 if okx_price and backpack_price else None
                         qty = int((MAX_ORDER_USD * MAX_LEVERAGE) / ((okx_price + backpack_price) / 2))
                         try:
-                            okx_result = execute_okx_order_swap(r["okx_symbol"], r["okx_action"], qty, price,
-                                                                order_type="limit")
+                            okx_result = execute_okx_order_swap(r["okx_symbol"], r["okx_action"], qty, price)
                             # 检查OKX订单是否成交
-                            check_okx_order_filled(r["okx_symbol"], okx_result["data"][0].get("ordId"))
-                            backpack_result = execute_backpack_order(r["backpack_symbol"], r["backpack_action"], qty,
-                                                                     price, order_type=OrderType.LIMIT)
+                            backpack_result = {}
+                            if check_okx_order_filled(r["okx_symbol"], okx_result["data"][0].get("ordId")):
+                                backpack_result = execute_backpack_order(r["backpack_symbol"], r["backpack_action"],
+                                                                         qty,
+                                                                         price)
+
+                            # todo 检查Backpack订单是否成交，若成交失败，则取消OKX订单或平仓，抛出异常
                         except Exception as e:
                             print(f"[异常] 执行开仓失败: {e}")
                             # todo okx开仓成功，backpack开仓失败，取消订单或平仓处理
@@ -387,31 +392,52 @@ def arbitrage_loop():
                             "entry_time": now,
                             "close_time": r["next_funding_time"],
                             "okx_order_id": okx_result["data"][0].get("ordId"),
-                            "backpack_order_id": backpack_result.get("id"),
+                            "backpack_order_id": backpack_result.get("id")
                         }
                         is_open = True
                         break  # 只执行一组
-                else:
-                    print("暂无合适资金费率套利")
+                    else:
+                        print(f"results annualized: {r['annualized']:.4%} < {THRESHOLD_DIFF_Y:.4%}, "
+                              f"okx_action: {r['okx_action']}, "
+                              f"backpack_action: {r['backpack_action']}, "
+                              f"next_funding_time: {datetime.fromtimestamp(int(r['next_funding_time']) / 1000)},"
+                              f"now: {datetime.now()}")
 
             else:
                 # 已开仓，进行监控
                 now_ts = int(datetime.now().timestamp() * 1000)
 
-                if now_ts >= open_info["close_time"]:
+                if now_ts >= int(open_info["close_time"]):
                     print("\n>> 到达应收益时点，开始平仓")
-                    # TODO: 平仓操作
-                    # TODO: 计算收益
+                    time.sleep(40)  # 等待40秒，确保资金费率结算完成
+
+                    close_okx_position_by_order_id(symbol=open_info["okx_symbol"], order_id=open_info["okx_order_id"])
+                    close_backpack_position_by_order_id(symbol=open_info["backpack_symbol"],
+                                                        order_id=open_info["backpack_order_id"])
                     print("[OKX]平仓", open_info["okx_symbol"])
                     print("[Backpack]平仓", open_info["backpack_symbol"])
-                    print(">> 本转奖励已经完成\n")
 
                     is_open = False
                     open_info = {}
                 else:
                     print(">> 未到结算时间，预估收益情况:")
-                    # TODO: 计算预估收益（新的资金费率 × 仓位）
-                    print("[暂无实际计算]")
+                    # 计算预计获利
+                    okx_symbol = open_info.get("okx_symbol")
+                    backpack_symbol = open_info.get("backpack_symbol")
+
+                    # 获取最新资金费率
+                    try:
+                        okx_rate, _, _ = get_okx_funding_rate(okx_public_api, okx_symbol)
+                        backpack_rate, _ = get_backpack_funding_rate(backpack_public, backpack_symbol)
+                        rate_diff = abs(okx_rate - backpack_rate)
+                        # 资金费率为单边，套利为双边，乘以仓位和杠杆
+                        # 预计收益 = 资金费率差 * 仓位 * 杠杆
+                        # 假设持有1个周期（8小时），年化换算：单次收益 * 3 * 365
+                        profit = rate_diff * MAX_LEVERAGE * MAX_ORDER_USD
+                        annualized = abs(rate_diff) * 3 * 365
+                        print(f"预计本周期获利: {profit:.2f} USDT, 年化: {annualized:.2%}")
+                    except Exception as e:
+                        print(f"计算预计获利失败: {e}")
 
             time.sleep(300)  # 每5分钟重试
 
