@@ -23,6 +23,7 @@ okx_account_api = Account.AccountAPI(
 okx_trade_api = Trade.TradeAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, False, okx_live_trading)
 okx_funding_api = Funding.FundingAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, False, okx_live_trading)
 okx_public_api = PublicData.PublicAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, False, okx_live_trading)
+okx_market_api = MarketData.MarketAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, False, okx_live_trading)
 
 # === 套利参数设置 ===
 # 合约标的映射：OKX 合约 -> Backpack 合约
@@ -89,7 +90,7 @@ def within_funding_window(next_funding_time, window_minutes):
     return 0 <= (next_funding_time - now).total_seconds() <= window_minutes * 60
 
 
-# 计算两个交易所的资金费率差，并计算年化收益并给标的排序def calculate_funding_rate_diff():
+# 计算两个交易所的资金费率差，并计算年化收益并给标的排序
 def calculate_funding_rate_diff():
     results = []
     for okx_symbol, backpack_symbol in SYMBOL_MAP.items():
@@ -142,7 +143,7 @@ def calculate_funding_rate_diff():
     return results
 
 
-# 在 OKX 上执行合约下单
+# 在 OKX 上执行合约下单，待优化，设置止损
 def execute_okx_order_swap(symbol, side, qty, price, order_type="market"):
     if side not in ["long", "short"]:
         raise ValueError("OKX 下单方向必须是 'long' 或 'short'")
@@ -173,15 +174,82 @@ def execute_okx_order_swap(symbol, side, qty, price, order_type="market"):
     print(f"[OKX] 下单结果: {order_result}")
     if order_result.get("code") != "0":
         raise Exception(f"OKX 下单失败: {order_result.get('msg')}")
+    return order_result
 
+# 在 OKX 上根据订单ID检查挂单是否成交
+def check_okx_order_filled(symbol, order_id, max_attempts=30, interval=1):
+    """
+    检查OKX订单是否成交，每1秒检查一次，最多检测max_attempts次。
+    :param symbol: 合约标的
+    :param order_id: 订单ID
+    :param max_attempts: 最大检测次数
+    :param interval: 检查间隔秒数
+    :return: True-已成交，False-未成交已取消
+    """
+    for attempt in range(max_attempts):
+        order_info = okx_trade_api.get_order(instId=symbol, ordId=order_id)
+        if not order_info or order_info.get("code") != "0":
+            print(f"查询OKX订单失败: {order_info.get('msg', '未知错误')}")
+            break
+        data = order_info["data"][0]
+        state = data.get("state")
+        if state == "filled":
+            print(f"订单已成交: {order_id}")
+            return True
+        elif state in ("canceled", "cancelled"):
+            print(f"订单已取消: {order_id}")
+            return False
+        time.sleep(interval)
+    # 超时未成交，取消订单
+    print(f"订单{order_id}未成交，准备取消")
+    cancel_result = okx_trade_api.cancel_order(instId=symbol, ordId=order_id)
+    print(f"取消订单结果: {cancel_result}")
+    return False
 
-# 在backpack 上执行合约下单
+# 在 OKX 上根据订单ID进行合约平仓
+def close_okx_position_by_order_id(symbol, order_id):
+    """
+    根据订单ID平仓：查询订单，获取参数，反向下单
+    :param symbol: 合约标的
+    :param order_id: 需平仓的订单ID
+    """
+    # 查询订单详情
+    order_info = okx_trade_api.get_order(instId=symbol, ordId=order_id)
+    if not order_info or order_info.get("code") != "0":
+        raise Exception(f"查询OKX订单失败: {order_info.get('msg', '未知错误')}")
+    data = order_info["data"][0]
+    pos_side = data.get("posSide", "net")
+    side = data["side"]
+    qty = data["sz"]
+    price = data.get("px", None)
+    # ord_type = data.get("ordType", "market")
+    ord_type = "market" # 默认使用市价单平仓
+    # 反向方向
+    close_side = "buy" if side == "sell" else "sell"
+    print(f"[OKX] 准备平仓: {symbol}, 方向: {close_side}, 数量: {qty}, 价格: {price}, 类型: {ord_type}")
+    # 平仓下单
+    order_result = okx_trade_api.place_order(
+        instId=symbol,
+        tdMode="isolated",
+        side=close_side,
+        ordType=ord_type,
+        sz=qty,
+        px=price,
+        posSide=pos_side,
+        reduceOnly=True
+    )
+    print(f"[OKX] 平仓结果: {order_result}")
+    if order_result.get("code") != "0":
+        raise Exception(f"OKX 平仓失败: {order_result.get('msg', '未知错误')}")
+    return order_result
+
+# 在backpack 上执行合约下单，待优化，设置止损
 def execute_backpack_order(symbol, side, qty, price, order_type=OrderType.MARKET):
     if side not in ["long", "short"]:
         raise ValueError("Backpack 下单方向必须是 'long' 或 'short'")
     # 设置合约交易参数
     backpack_client.update_account(
-        leverageLimit=str(MAX_LEVERAGE)
+        leverageLimit=str(MAX_LEVERAGE) # 杠杆倍数
     )
 
     # 执行下单
@@ -198,6 +266,67 @@ def execute_backpack_order(symbol, side, qty, price, order_type=OrderType.MARKET
     if not order_result or "error" in order_result:
         raise Exception(f"Backpack 下单失败: {order_result.get('error', '未知错误')}")
     return order_result
+
+# 在backpack 上根据订单ID检查挂单是否成交
+def check_backpack_order_filled(symbol, order_id, max_attempts=30, interval=1):
+    """
+    检查Backpack订单是否成交，每1秒检查一次，最多检测max_attempts次。
+    :param symbol: 合约标的
+    :param order_id: 订单ID
+    :param max_attempts: 最大检测次数
+    :param interval: 检查间隔秒数
+    :return: True-已成交，False-未成交已取消
+    """
+    for attempt in range(max_attempts):
+        fill_order = backpack_client.get_fill_history(symbol=symbol, orderId=order_id)
+        if not fill_order or "error" in fill_order:
+            print(f"查询Backpack订单失败: {fill_order.get('error', '未知错误') if fill_order else '无返回'}")
+            break
+        if fill_order and len(fill_order) > 0:
+            print(f"订单已成交: {order_id}")
+            return True
+        time.sleep(interval)
+    print(f"订单{order_id}未成交，准备取消")
+    backpack_client.cancel_open_order(symbol=symbol, orderId=order_id)
+    return False
+
+# 在backpack 上进行合约平仓（通过订单ID反向下单）,开仓后才可平仓，合约挂单未成交不算平仓
+def close_backpack_position_by_order_id(symbol, order_id):
+    """
+    根据订单ID平仓：查询订单，获取参数，反向下单
+    :param symbol:
+    :param order_id: 需平仓的订单ID
+    """
+    # 查询订单详情
+    order_info = backpack_client.get_users_open_orders(symbol=symbol, orderId=order_id)
+    if not order_info or "error" in order_info:
+        raise Exception(f"查询订单失败: {order_info.get('error', '未知错误')}")
+    print(f"[Backpack] 查询到订单信息: {order_info}")
+    symbol = order_info["symbol"]
+    side = order_info["side"]
+    qty = order_info["quantity"]
+    price = order_info["price"]
+    # order_type = order_info.get("orderType", OrderType.MARKET)
+    order_type = OrderType.MARKET  # 默认使用市价单平仓
+    # 反向方向
+    close_side = "short" if side == "Bid" else "long"
+    # 平仓下单
+    print(f"[Backpack] 准备平仓: {symbol}, 方向: {close_side}, 数量: {qty}, 价格: {price}, 类型: {order_type}")
+    order_result = backpack_client.execute_order(
+        orderType=order_type,
+        side=OrderSide.ASK if close_side == "short" else OrderSide.BID,
+        symbol=symbol,
+        quantity=str(qty),
+        timeInForce=TimeInForce.GTC,
+        postOnly=True,
+        price=price,
+        reduceOnly=True  # 确保是平仓操作
+    )
+    print(f"[Backpack] 平仓结果: {order_result}")
+    if not order_result or "error" in order_result:
+        raise Exception(f"Backpack 平仓失败: {order_result.get('error', '未知错误')}")
+    return order_result
+
 
 
 # === 主套利逻辑 ===
@@ -221,11 +350,26 @@ def arbitrage_loop():
                             and within_funding_window(datetime.fromtimestamp(r["next_funding_time"] / 1000),
                                                       SETTLEMENT_WINDOW_MIN)
                     ):
-                        # 执行开仓
-                        print("\n>> 开始执行开仓...")
-                        qty = round(MAX_ORDER_USD / 5, 2)  # 例如假设单位为 1U
-                        execute_okx_order_swap(r["okx_symbol"], r["okx_action"], qty)
-                        execute_backpack_order(r["backpack_symbol"], r["backpack_action"], qty)
+                        # 执行开仓前准备工作
+                        print("\n>> 开始执行开仓前准备...")
+                        # 获取当前标的最新价格
+                        okx_ticker = okx_market_api.get_ticker(instId=r["okx_symbol"])
+                        okx_price = float(okx_ticker["data"][0]["last"]) if okx_ticker and "data" in okx_ticker else None
+                        backpack_ticker = backpack_public.get_ticker(r["backpack_symbol"])
+                        backpack_price = float(backpack_ticker["lastPrice"]) if backpack_ticker and "lastPrice" in backpack_ticker else None
+                        print(f"OKX最新价: {okx_price}, Backpack最新价: {backpack_price}")
+                        price = (okx_price + backpack_price) / 2 if okx_price and backpack_price else None
+                        qty = int((MAX_ORDER_USD * MAX_LEVERAGE) / ((okx_price + backpack_price) / 2))
+                        try:
+                            okx_result = execute_okx_order_swap(r["okx_symbol"], r["okx_action"], qty, price, order_type="limit")
+                            # 检查OKX订单是否成交
+                            check_okx_order_filled(r["okx_symbol"], okx_result["data"][0].get("ordId"))
+                            backpack_result = execute_backpack_order(r["backpack_symbol"], r["backpack_action"], qty, price, order_type=OrderType.LIMIT)
+                        except Exception as e:
+                            print(f"[异常] 执行开仓失败: {e}")
+                            # todo okx开仓成功，backpack开仓失败，取消订单或平仓处理
+                            continue
+                        print(f"[OKX]开仓: {r['okx_symbol']}, 方向: {r['okx_action']}, 数量: {qty}, 价格: {price}")
 
                         open_info = {
                             "okx_symbol": r["okx_symbol"],
@@ -233,12 +377,14 @@ def arbitrage_loop():
                             "okx_action": r["okx_action"],
                             "backpack_action": r["backpack_action"],
                             "entry_time": now,
-                            "close_time": r["next_funding_time"]
+                            "close_time": r["next_funding_time"],
+                            "okx_order_id": okx_result["data"][0].get("ordId"),
+                            "backpack_order_id": backpack_result.get("id"),
                         }
                         is_open = True
-                        break  # 只执行一小组
+                        break  # 只执行一组
                 else:
-                    print("暂无合适契约可执行奖励")
+                    print("暂无合适资金费率套利")
 
             else:
                 # 已开仓，进行监控
@@ -263,6 +409,7 @@ def arbitrage_loop():
 
         except Exception as e:
             print("[异常]", e)
+            # todo 订单是否成功挂单，进行取消或平仓处理
             time.sleep(60)
 
 

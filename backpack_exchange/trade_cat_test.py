@@ -1,9 +1,11 @@
+import time
+
 from backpack_exchange_sdk.authenticated import AuthenticationClient
 from backpack_exchange_sdk.public import PublicClient
 from enums.RequestEnums import OrderType
 
 from arbitrage_bot.backpack_okx_arbitrage_bot import get_backpack_funding_rate, calculate_funding_rate_diff, \
-    execute_backpack_order
+    execute_backpack_order, close_backpack_position_by_order_id
 from backpack_exchange.trade_prepare import proxy_on, load_backpack_api_keys
 
 proxy_on()
@@ -28,13 +30,18 @@ if __name__ == '__main__':
     SOL_USDC_PERP_ticker = public.get_ticker("SOL_USDC_PERP")
     print(f"SOL_USDC_PERP Ticker:{SOL_USDC_PERP_ticker.get('lastPrice')}")
     bid_price_perp = round(float(SOL_USDC_PERP_ticker.get("lastPrice")) * 0.8, 2)
-    execute_backpack_order(
+    order_result = execute_backpack_order(
         symbol=symbol_sol_perp,
         side="long",
         qty="1",
         price=str(bid_price_perp),
         order_type=OrderType.LIMIT
     )
+    order_id = order_result.get("id")
+    order_symbol = order_result.get("symbol")
+    time.sleep(5)  # 等待5s后取消订单
+    cancel_result = close_backpack_position_by_order_id(order_symbol, order_id)
+
 
     # bid_price = round(float(ticker.get("lastPrice")) * 0.75, 2)
     # ask_price = round(float(ticker.get("lastPrice")) * 1.25, 2)
