@@ -36,14 +36,20 @@ SYMBOL_MAP = {
     "XRP-USDT-SWAP": "XRP_USDC_PERP",
     "DOGE-USDT-SWAP": "DOGE_USDC_PERP",
     "KAITO-USDT-SWAP": "KAITO_USDC_PERP",
+    "BNB-USDT-SWAP": "BNB_USDC_PERP",
+    "FARTCOIN-USDT-SWAP": "FARTCOIN_USDC_PERP",
+    "AAVE-USDT-SWAP": "AAVE_USDC_PERP",
+    "HYPE-USDT-SWAP": "HYPE_USDC_PERP",
 }
 OKX_SYMBOL = "SOL-USDT-SWAP"  # OKX 的永续合约标识（示例）
 BACKPACK_SYMBOL = "SOL_USDC_PERP"  # Backpack 标识
-THRESHOLD_DIFF_Y = 0.1  # 资金费率差套利阈值年化（10%）
+THRESHOLD_DIFF_Y = 0.07  # 资金费率差套利阈值年化（10%）
 MAX_ORDER_USD = 5  # 每次套利的最大 USD 头寸
 MAX_LEVERAGE = 2  # 最大杠杆倍数
-SETTLEMENT_WINDOW_MIN = 15  # 资金费率结算前几分钟内允许操作
+SETTLEMENT_WINDOW_MIN = 480  # 资金费率结算前几分钟内允许操作
 
+
+# todo 确定套利标的最小合约下单张数
 
 # === 工具函数 ===
 # 获取 OKX 标的资金费率,结算时间,下次结算时间
@@ -171,7 +177,8 @@ def execute_okx_order_swap(symbol, side, qty, price, order_type="market"):
         side="sell" if side == "short" else "buy",  # 做空或做多
         ordType=order_type,  # 市价单
         sz=str(qty),  # 下单数量（合约张数）
-        px=price
+        px=price,
+        posSide=side,  # 持仓方向
     )
     print(f"[OKX] 下单结果: {order_result}")
     if order_result.get("code") != "0":
@@ -258,17 +265,23 @@ def execute_backpack_order(symbol, side, qty, price, order_type=OrderType.MARKET
     )
 
     # 执行下单
-    order_result = backpack_client.execute_order(
-        orderType=order_type,
-        side=OrderSide.BID if side == "long" else OrderSide.ASK,
-        symbol=symbol,
-        quantity=str(qty),  # 数量单位为合约张数
-        timeInForce=TimeInForce.GTC,  # Good Till Cancelled
-        postOnly=True,  # 确保是挂单而非吃单,限价单才生效
-        price=price
-    )
+
+    try:
+
+        order_result = backpack_client.execute_order(
+            orderType=order_type,
+            side=OrderSide.BID if side == "long" else OrderSide.ASK,
+            symbol=symbol,
+            quantity=str(qty),  # 数量单位为合约张数
+            timeInForce=TimeInForce.GTC,  # Good Till Cancelled
+            postOnly=True,  # 确保是挂单而非吃单,限价单才生效
+            price=price
+        )
+    except requests.exceptions.RequestException as e:
+        print(f"[异常] Backpack 下单请求失败: {e}")
+        raise e
     print(f"[Backpack] 下单结果: {order_result}")
-    if not order_result or "error" in order_result:
+    if not order_result or "Error" in order_result:
         raise Exception(f"Backpack 下单失败: {order_result.get('error', '未知错误')}")
     return order_result
 
@@ -330,7 +343,7 @@ def close_backpack_position_by_order_id(symbol, order_id):
         reduceOnly=True  # 确保是平仓操作
     )
     print(f"[Backpack] 平仓结果: {order_result}")
-    if not order_result or "error" in order_result:
+    if not order_result or "Error" in order_result:
         raise Exception(f"Backpack 平仓失败: {order_result.get('error', '未知错误')}")
     return order_result
 
@@ -367,22 +380,61 @@ def arbitrage_loop():
                                                    "lastPrice"]) if backpack_ticker and "lastPrice" in backpack_ticker else None
                         print(f"OKX最新价: {okx_price}, Backpack最新价: {backpack_price}")
                         price = (okx_price + backpack_price) / 2 if okx_price and backpack_price else None
-                        qty = int((MAX_ORDER_USD * MAX_LEVERAGE) / ((okx_price + backpack_price) / 2))
-                        try:
-                            okx_result = execute_okx_order_swap(r["okx_symbol"], r["okx_action"], qty, price)
-                            # 检查OKX订单是否成交
-                            backpack_result = {}
-                            if check_okx_order_filled(r["okx_symbol"], okx_result["data"][0].get("ordId")):
-                                backpack_result = execute_backpack_order(r["backpack_symbol"], r["backpack_action"],
-                                                                         qty,
-                                                                         price)
 
-                            # todo 检查Backpack订单是否成交，若成交失败，则取消OKX订单或平仓，抛出异常
+                        qty = round((MAX_ORDER_USD * MAX_LEVERAGE) / ((okx_price + backpack_price) / 2), 2)
+
+                        print(f"计划开仓数量: {qty}, 价格: {price}")
+                        # 平台开单逻辑，okx先尝试开单三次，成功则进行Backpack开单，不成功抛出异常，外层再重试一次
+                        # backpack开单逻辑，okx开单成功后，检查订单是否成交，成交则进行Backpack开单，同样尝试三次
+                        try:
+                            # 子try catch 1: OKX下单
+                            okx_result = {}
+                            for okx_attempt in range(3):
+                                try:
+                                    okx_result = execute_okx_order_swap(r["okx_symbol"], r["okx_action"], qty, price)
+                                    break
+                                except Exception as okx_e:
+                                    print(f"[异常] OKX下单失败, 第{okx_attempt + 1}次重试: {okx_e}")
+                                    if okx_attempt == 2:
+                                        raise
+                                    time.sleep(2)
+                            # 子try catch 2: 检查OKX订单并Backpack下单
+                            for bp_attempt in range(3):
+                                try:
+                                    backpack_result = {}
+                                    if ((bp_attempt == 0 and
+                                         check_okx_order_filled(r["okx_symbol"], okx_result["data"][0].get("ordId")))
+                                            or bp_attempt > 0):
+                                        backpack_result = execute_backpack_order(r["backpack_symbol"],
+                                                                                 r["backpack_action"], qty, price)
+                                    break
+                                except Exception as bp_e:
+                                    print(f"[异常] Backpack下单失败, 第{bp_attempt + 1}次重试: {bp_e}")
+                                    if bp_attempt == 2:
+                                        raise
+                                    time.sleep(2)
                         except Exception as e:
-                            print(f"[异常] 执行开仓失败: {e}")
-                            # todo okx开仓成功，backpack开仓失败，取消订单或平仓处理
-                            continue
-                        print(f"[OKX]开仓: {r['okx_symbol']}, 方向: {r['okx_action']}, 数量: {qty}, 价格: {price}")
+                            print(f"[异常] 执行开仓失败: {e}, 正在取消OKX和Backpack所有当前标的开单并重试...")
+                            # 取消OKX当前标的所有开单
+                            try:
+                                open_orders = okx_trade_api.get_order_list(instId=r["okx_symbol"])
+                                if open_orders and open_orders.get("code") == "0":
+                                    for order in open_orders["data"]:
+                                        okx_trade_api.cancel_order(instId=r["okx_symbol"], ordId=order["ordId"])
+                            except Exception as cancel_okx_e:
+                                print(f"[异常] 取消OKX开单失败: {cancel_okx_e}")
+                            # 取消Backpack当前标的所有开单
+                            try:
+                                open_orders = backpack_client.get_users_open_orders(symbol=r["backpack_symbol"])
+                                if open_orders and isinstance(open_orders, list):
+                                    for order in open_orders:
+                                        backpack_client.cancel_open_order(symbol=r["backpack_symbol"],
+                                                                          orderId=order["id"])
+                            except Exception as cancel_bp_e:
+                                print(f"[异常] 取消Backpack开单失败: {cancel_bp_e}")
+                            # 重试开仓
+                            execute_okx_order_swap(r["okx_symbol"], r["okx_action"], qty, price)
+                            execute_backpack_order(r["backpack_symbol"], r["backpack_action"], qty, price)
 
                         open_info = {
                             "okx_symbol": r["okx_symbol"],
@@ -443,8 +495,8 @@ def arbitrage_loop():
 
         except Exception as e:
             print("[异常]", e)
+            break
             # todo 订单是否成功挂单，进行取消或平仓处理
-            time.sleep(60)
 
 
 if __name__ == "__main__":
