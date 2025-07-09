@@ -1,7 +1,9 @@
 from backpack_exchange_sdk.authenticated import AuthenticationClient
 from backpack_exchange_sdk.public import PublicClient
+from enums.RequestEnums import OrderType
 
-from arbitrage_bot.backpack_okx_arbitrage_bot import get_backpack_funding_rate
+from arbitrage_bot.backpack_okx_arbitrage_bot import get_backpack_funding_rate, calculate_funding_rate_diff, \
+    execute_backpack_order
 from backpack_exchange.trade_prepare import proxy_on, load_backpack_api_keys
 
 proxy_on()
@@ -15,11 +17,24 @@ if __name__ == '__main__':
     balance = client.get_balances()
     print(f"Current Balances: {balance}")
     # 获取SOL标的当前标记价格
+    symbol_sol = "SOL_USDC"
+    symbol_sol_perp = "SOL_USDC_PERP"
     ticker = public.get_ticker("SOL_USDC")
     print(f"SOL_USDC Ticker: {ticker.get('lastPrice')}")
     # 获取资金费率
     funding_rate = get_backpack_funding_rate(public, "SOL_USDC_PERP")
-
+    # 资金费率排序测试
+    # calculate_funding_rate_diff()
+    SOL_USDC_PERP_ticker = public.get_ticker("SOL_USDC_PERP")
+    print(f"SOL_USDC_PERP Ticker:{SOL_USDC_PERP_ticker.get('lastPrice')}")
+    bid_price_perp = round(float(SOL_USDC_PERP_ticker.get("lastPrice")) * 0.8, 2)
+    execute_backpack_order(
+        symbol=symbol_sol_perp,
+        side="long",
+        qty="1",
+        price=str(bid_price_perp),
+        order_type=OrderType.LIMIT
+    )
 
     # bid_price = round(float(ticker.get("lastPrice")) * 0.75, 2)
     # ask_price = round(float(ticker.get("lastPrice")) * 1.25, 2)
