@@ -358,9 +358,10 @@ def close_backpack_position_by_order_id(symbol, order_id):
     :param order_id: 需平仓的订单ID
     """
     # 查询订单详情
-    order_info = backpack_client.get_users_open_orders(symbol=symbol, orderId=order_id)
-    if not order_info or "error" in order_info:
-        raise Exception(f"查询订单失败: {order_info.get('error', '未知错误')}")
+    order_infos = backpack_client.get_fill_history(symbol=symbol, orderId=order_id)
+    if not order_infos or "error" in order_infos:
+        raise Exception(f"查询订单失败: {order_infos.get('error', '未知错误')}")
+    order_info = order_infos[0]
     print(f"[Backpack] 查询到订单信息: {order_info}")
     symbol = order_info["symbol"]
     side = order_info["side"]
@@ -527,6 +528,7 @@ def arbitrage_loop():
             else:
                 # 已开仓，进行监控
                 now_ts = int(datetime.now().timestamp() * 1000)
+                print(f"当前时间: {datetime.now()}, 关仓时间: {datetime.fromtimestamp(int(open_info['close_time']) / 1000)}")
 
                 if now_ts >= int(open_info["close_time"]):
                     print("\n>> 到达应收益时点，开始平仓")

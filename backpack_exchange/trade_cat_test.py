@@ -29,17 +29,17 @@ if __name__ == '__main__':
     # calculate_funding_rate_diff()
     SOL_USDC_PERP_ticker = public.get_ticker("SOL_USDC_PERP")
     print(f"SOL_USDC_PERP Ticker:{SOL_USDC_PERP_ticker.get('lastPrice')}")
-    bid_price_perp = round(float(SOL_USDC_PERP_ticker.get("lastPrice")) * 0.8, 2)
+    bid_price_perp = round(float(SOL_USDC_PERP_ticker.get("lastPrice")), 2)
     order_result = execute_backpack_order(
         symbol=symbol_sol_perp,
         side="long",
-        qty="1",
+        qty="0.01",
         price=str(bid_price_perp),
         order_type=OrderType.LIMIT
     )
     order_id = order_result.get("id")
     order_symbol = order_result.get("symbol")
-    time.sleep(5)  # 等待5s后取消订单
+    time.sleep(50)  # 等待5s后取消订单
     cancel_result = close_backpack_position_by_order_id(order_symbol, order_id)
 
 
