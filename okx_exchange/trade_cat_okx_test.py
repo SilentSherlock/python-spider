@@ -3,7 +3,7 @@ import time
 from okx import Funding, Trade, PublicData
 import okx.Account as Account
 
-from arbitrage_bot.backpack_okx_arbitrage_bot import get_okx_funding_rate
+from arbitrage_bot.backpack_okx_arbitrage_bot import get_okx_funding_rate, SYMBOL_MAP
 from backpack_exchange.trade_prepare import proxy_on, load_okx_api_keys, load_okx_api_keys_test
 
 proxy_on()  # 启用代理（如果需要）
@@ -87,9 +87,23 @@ print(f"Leverage Result: {leverage_result}")
 # 平仓订单
 # order_id = order_result['data'][0].get("ordId")
 # close_order_result = close_okx_position_by_order_id("SOL-USDT-SWAP", order_id)
+
 okx_ticker = okx_public_api_test.get_instruments(instType="SWAP", instId="SOL-USDT-SWAP")
-print(f"Ticker Result: {okx_ticker}")
+# 获取合约交易对的lotsz和minSz
+symbol_lotsz_minsz_map = {}
+for symbol in SYMBOL_MAP.keys():
+    ticker_info = okx_public_api_test.get_instruments(instType="SWAP", instId=symbol)
+    if ticker_info and ticker_info.get("code") == "0" and ticker_info.get("data"):
+        data = ticker_info["data"][0]
+        ctVal = data.get("ctVal")
+        lotsz = data.get("lotSz")
+        minsz = data.get("minSz")
+        symbol_lotsz_minsz_map[symbol] = {"lotsz": lotsz, "minsz": minsz, "ctVal": ctVal}
+print(f"Symbol lotsz & minsz map: {symbol_lotsz_minsz_map}")
+
+print(f"Ticker Instruments Result: {okx_ticker}")
 
 # 获取资金费率及结算时间
 funding_rate_result = get_okx_funding_rate(okx_public_api_test, "SOL-USDT-SWAP")
+
 print(f"Funding Rate Result: {funding_rate_result}")

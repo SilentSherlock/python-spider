@@ -41,17 +41,56 @@ SYMBOL_MAP = {
     "AAVE-USDT-SWAP": "AAVE_USDC_PERP",
     "HYPE-USDT-SWAP": "HYPE_USDC_PERP",
 }
+
+SYMBOL_OKX_INSTRUMENT_MAP = {'BTC-USDT-SWAP': {'lotsz': '0.01', 'minsz': '0.01', 'ctVal': '0.01'},
+                             'ETH-USDT-SWAP': {'lotsz': '0.01', 'minsz': '0.01', 'ctVal': '0.1'},
+                             'SOL-USDT-SWAP': {'lotsz': '0.01', 'minsz': '0.01', 'ctVal': '1'},
+                             'SUI-USDT-SWAP': {'lotsz': '1', 'minsz': '1', 'ctVal': '1'},
+                             'XRP-USDT-SWAP': {'lotsz': '0.01', 'minsz': '0.01', 'ctVal': '100'},
+                             'DOGE-USDT-SWAP': {'lotsz': '0.01', 'minsz': '0.01', 'ctVal': '1000'},
+                             'KAITO-USDT-SWAP': {'lotsz': '1', 'minsz': '1', 'ctVal': '1'},
+                             'BNB-USDT-SWAP': {'lotsz': '1', 'minsz': '1', 'ctVal': '0.01'},
+                             'AAVE-USDT-SWAP': {'lotsz': '0.1', 'minsz': '0.1', 'ctVal': '0.1'}}
 OKX_SYMBOL = "SOL-USDT-SWAP"  # OKX 的永续合约标识（示例）
 BACKPACK_SYMBOL = "SOL_USDC_PERP"  # Backpack 标识
 THRESHOLD_DIFF_Y = 0.07  # 资金费率差套利阈值年化（10%）
 MAX_ORDER_USD = 5  # 每次套利的最大 USD 头寸
 MAX_LEVERAGE = 2  # 最大杠杆倍数
-SETTLEMENT_WINDOW_MIN = 480  # 资金费率结算前几分钟内允许操作
+SETTLEMENT_WINDOW_MIN = 30  # 资金费率结算前几分钟内允许操作
 
-
-# todo 确定套利标的最小合约下单张数
 
 # === 工具函数 ===
+# 计算合约张数
+def calc_qty(symbol_price, margin_usdt, leverage, ct_val):
+    """
+    计算公式
+    合约张数 = (保证金 * 杠杆数) / 标的价格 / 合约面值
+    :param symbol_price: 标的价格
+    :param margin_usdt: 保证金
+    :param leverage: 杠杆数
+    :param ct_val:合约面值
+    :return: 合约张数
+    """
+    position_usdt = margin_usdt * leverage
+    token_amount = position_usdt / symbol_price
+    return float(token_amount / ct_val)  #
+
+
+# 计算合约数目，币本位
+def calc_qty_backpack(symbol_price, margin_usdt, leverage):
+    """
+    计算公式
+    合约张数 = (保证金 * 杠杆数) / 标的价格
+    :param symbol_price: 标的价格
+    :param margin_usdt: 保证金
+    :param leverage: 杠杆数
+    :return: 合约张数
+    """
+    position_usdt = margin_usdt * leverage
+    token_amount = position_usdt / symbol_price
+    return float(token_amount)  # 返回张数
+
+
 # 获取 OKX 标的资金费率,结算时间,下次结算时间
 def get_okx_funding_rate(public_api, symbol):
     funding_info = public_api.get_funding_rate(symbol)
@@ -67,7 +106,8 @@ def get_okx_funding_rate(public_api, symbol):
     # 转换为本地时间进行可读性输出
     funding_time_read = datetime.fromtimestamp(int(funding_time) / 1000)
     next_funding_time_read = datetime.fromtimestamp(int(next_funding_time) / 1000)
-    print(f"okx 资金费率: {rate:.4%}, 结算时间: {funding_time_read}, 下次结算时间: {next_funding_time_read}")
+    print(
+        f"okx symbol {symbol} 资金费率: {rate:.4%}, 结算时间: {funding_time_read}, 下次结算时间: {next_funding_time_read}")
 
     return rate, funding_time, next_funding_time
 
@@ -84,7 +124,7 @@ def get_backpack_funding_rate(public, symbol):
     interval_end_timestamp = parser.parse(data["intervalEndTimestamp"])  # backpack返回的是上次结算后的本地时间2025-07-08T16:00:00
     funding_time = interval_end_timestamp + timedelta(hours=8)  # Backpack 的资金费率是每8小时结算一次
 
-    print(f"Backpack 资金费率: {rate:.4%}, 结算时间: {funding_time}")
+    print(f"Backpack symbol {symbol} 资金费率: {rate:.4%}, 结算时间: {funding_time}")
     funding_time_unix = int(funding_time.timestamp() * 1000)  # 转换为毫秒时间戳
 
     return rate, funding_time_unix
@@ -377,21 +417,36 @@ def arbitrage_loop():
                             okx_ticker["data"][0]["last"]) if okx_ticker and "data" in okx_ticker else None
                         backpack_ticker = backpack_public.get_ticker(r["backpack_symbol"])
                         backpack_price = float(backpack_ticker[
-                                                   "lastPrice"]) if backpack_ticker and "lastPrice" in backpack_ticker else None
+                                                   "lastPrice"]) if backpack_ticker and "lastPrice" in backpack_ticker \
+                            else None
                         print(f"OKX最新价: {okx_price}, Backpack最新价: {backpack_price}")
                         price = (okx_price + backpack_price) / 2 if okx_price and backpack_price else None
 
-                        qty = round((MAX_ORDER_USD * MAX_LEVERAGE) / ((okx_price + backpack_price) / 2), 2)
+                        # 计算okx合约张数（先用calc_qty计算，再向下取整为最小张数的整数倍）
+                        okx_ctval = float(SYMBOL_OKX_INSTRUMENT_MAP[r["okx_symbol"]]["ctVal"])  # 合约面值
+                        okx_minsz = float(SYMBOL_OKX_INSTRUMENT_MAP[r["okx_symbol"]]["minsz"])  # 最小张数
+                        raw_okx_qty = calc_qty((okx_price + backpack_price) / 2, MAX_ORDER_USD, MAX_LEVERAGE, okx_ctval)
+                        okx_qty = int(raw_okx_qty // okx_minsz) * okx_minsz
+                        okx_qty = round(okx_qty, 4)
+                        # 根据okx_qty反推backpack_qty（币本位：张数 * 合约面值）
+                        backpack_qty = round(okx_qty * okx_ctval, 4)
+                        print(f"计划开仓数量okx: {okx_qty}, 价格: {price}, backpack: {backpack_qty}")
+                        if not price or okx_qty <= 0 or backpack_qty <= 0:
+                            print(
+                                f"[异常] 计算开仓数量或价格失败: okx_qty={okx_qty}, backpack_qty={backpack_qty}, price={price}")
+                            continue
 
-                        print(f"计划开仓数量: {qty}, 价格: {price}")
                         # 平台开单逻辑，okx先尝试开单三次，成功则进行Backpack开单，不成功抛出异常，外层再重试一次
                         # backpack开单逻辑，okx开单成功后，检查订单是否成交，成交则进行Backpack开单，同样尝试三次
+                        # continue
                         try:
                             # 子try catch 1: OKX下单
                             okx_result = {}
+                            backpack_result = {}
                             for okx_attempt in range(3):
                                 try:
-                                    okx_result = execute_okx_order_swap(r["okx_symbol"], r["okx_action"], qty, price)
+                                    okx_result = execute_okx_order_swap(r["okx_symbol"], r["okx_action"], okx_qty,
+                                                                        price)
                                     break
                                 except Exception as okx_e:
                                     print(f"[异常] OKX下单失败, 第{okx_attempt + 1}次重试: {okx_e}")
@@ -401,12 +456,12 @@ def arbitrage_loop():
                             # 子try catch 2: 检查OKX订单并Backpack下单
                             for bp_attempt in range(3):
                                 try:
-                                    backpack_result = {}
                                     if ((bp_attempt == 0 and
                                          check_okx_order_filled(r["okx_symbol"], okx_result["data"][0].get("ordId")))
                                             or bp_attempt > 0):
                                         backpack_result = execute_backpack_order(r["backpack_symbol"],
-                                                                                 r["backpack_action"], qty, price)
+                                                                                 r["backpack_action"], backpack_qty,
+                                                                                 price)
                                     break
                                 except Exception as bp_e:
                                     print(f"[异常] Backpack下单失败, 第{bp_attempt + 1}次重试: {bp_e}")
@@ -433,9 +488,20 @@ def arbitrage_loop():
                             except Exception as cancel_bp_e:
                                 print(f"[异常] 取消Backpack开单失败: {cancel_bp_e}")
                             # 重试开仓
-                            execute_okx_order_swap(r["okx_symbol"], r["okx_action"], qty, price)
-                            execute_backpack_order(r["backpack_symbol"], r["backpack_action"], qty, price)
+                            okx_result = execute_okx_order_swap(r["okx_symbol"], r["okx_action"], okx_qty, price)
+                            backpack_result = execute_backpack_order(r["backpack_symbol"], r["backpack_action"],
+                                                                     backpack_qty,
+                                                                     price)
+                        # 获取已开仓位的价值
+                        okx_order_info = okx_trade_api.get_order(instId=r["okx_symbol"],
+                                                                 ordId=okx_result["data"][0].get("ordId"))
+                        if not okx_order_info or okx_order_info.get("code") != "0":
+                            raise Exception(f"获取OKX订单信息失败: {okx_order_info.get('msg', '未知错误')}")
 
+                        okx_fillsz = float(okx_order_info["data"][0]["fillSz"])  # 已成交数量
+                        okx_avgPx = float(okx_order_info["data"][0]["avgPx"])  # 平均成交价格
+
+                        # 开仓信息汇总
                         open_info = {
                             "okx_symbol": r["okx_symbol"],
                             "backpack_symbol": r["backpack_symbol"],
@@ -444,12 +510,15 @@ def arbitrage_loop():
                             "entry_time": now,
                             "close_time": r["next_funding_time"],
                             "okx_order_id": okx_result["data"][0].get("ordId"),
-                            "backpack_order_id": backpack_result.get("id")
+                            "backpack_order_id": backpack_result.get("id"),
+                            "okx_qty": okx_qty,
+                            "backpack_qty": backpack_qty,
                         }
                         is_open = True
+                        print(f"\n>> 开仓成功: open_info={open_info}")
                         break  # 只执行一组
                     else:
-                        print(f"results annualized: {r['annualized']:.4%} < {THRESHOLD_DIFF_Y:.4%}, "
+                        print(f"results annualized: {r['annualized']:.4%}  {THRESHOLD_DIFF_Y:.4%}, "
                               f"okx_action: {r['okx_action']}, "
                               f"backpack_action: {r['backpack_action']}, "
                               f"next_funding_time: {datetime.fromtimestamp(int(r['next_funding_time']) / 1000)},"
@@ -482,8 +551,8 @@ def arbitrage_loop():
                         okx_rate, _, _ = get_okx_funding_rate(okx_public_api, okx_symbol)
                         backpack_rate, _ = get_backpack_funding_rate(backpack_public, backpack_symbol)
                         rate_diff = abs(okx_rate - backpack_rate)
-                        # 资金费率为单边，套利为双边，乘以仓位和杠杆
-                        # 预计收益 = 资金费率差 * 仓位 * 杠杆
+                        # 资金费率为单边，套利为双边
+                        # 预计收益 = 资金费率差 * 仓位
                         # 假设持有1个周期（8小时），年化换算：单次收益 * 3 * 365
                         profit = rate_diff * MAX_LEVERAGE * MAX_ORDER_USD
                         annualized = abs(rate_diff) * 3 * 365
@@ -495,8 +564,12 @@ def arbitrage_loop():
 
         except Exception as e:
             print("[异常]", e)
+            print("正在取消所有当前标的开单并重试...")
+            if is_open:
+                close_okx_position_by_order_id(symbol=open_info["okx_symbol"], order_id=open_info["okx_order_id"])
+                close_backpack_position_by_order_id(symbol=open_info["backpack_symbol"],
+                                                    order_id=open_info["backpack_order_id"])
             break
-            # todo 订单是否成功挂单，进行取消或平仓处理
 
 
 if __name__ == "__main__":
