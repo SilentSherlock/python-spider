@@ -54,7 +54,7 @@ SYMBOL_OKX_INSTRUMENT_MAP = {'BTC-USDT-SWAP': {'lotsz': '0.01', 'minsz': '0.01',
 OKX_SYMBOL = "SOL-USDT-SWAP"  # OKX 的永续合约标识（示例）
 BACKPACK_SYMBOL = "SOL_USDC_PERP"  # Backpack 标识
 THRESHOLD_DIFF_Y = 0.07  # 资金费率差套利阈值年化（10%）
-MAX_ORDER_USD = 5  # 每次套利的最大 USD 头寸
+MAX_ORDER_USD = 50  # 每次套利的最大 USD 头寸
 MAX_LEVERAGE = 2  # 最大杠杆倍数
 SETTLEMENT_WINDOW_MIN = 30  # 资金费率结算前几分钟内允许操作
 
