@@ -562,8 +562,10 @@ def arbitrage_loop():
                     except Exception as e:
                         print(f"计算预计获利失败: {e}")
 
-            time.sleep(300)  # 每5分钟重试
-
+            if is_open:
+                time.sleep(300)  # 每5分钟重试
+            else:
+                time.sleep(60*15)  # 每15分钟检查一次套利机会
         except Exception as e:
             print("[异常]", e)
             print("正在取消所有当前标的开单并重试...")
