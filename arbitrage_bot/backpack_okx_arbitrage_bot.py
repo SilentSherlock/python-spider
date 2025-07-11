@@ -1,19 +1,20 @@
 import time
-import requests
 from datetime import datetime, timedelta
-from dateutil import parser
 
+import requests
 from backpack_exchange_sdk.authenticated import AuthenticationClient
 from backpack_exchange_sdk.public import PublicClient
+from dateutil import parser
 from enums.RequestEnums import OrderType, OrderSide, TimeInForce
 from okx import Account, Trade, Funding, MarketData, PublicData
 
-from backpack_exchange.trade_prepare import proxy_on, load_backpack_api_keys, load_okx_api_keys
+from backpack_exchange.trade_prepare import (proxy_on, load_okx_api_keys_trade_cat_okx,
+                                             load_backpack_api_keys_trade_cat_funding)
 
 # === 初始化设置 ===
 proxy_on()  # 启用代理（如果需要）
-OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE = load_okx_api_keys()
-BACKPACK_API_KEY, BACKPACK_SECRET_KEY = load_backpack_api_keys()
+OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE = load_okx_api_keys_trade_cat_okx()
+BACKPACK_API_KEY, BACKPACK_SECRET_KEY = load_backpack_api_keys_trade_cat_funding()
 
 backpack_client = AuthenticationClient(BACKPACK_API_KEY, BACKPACK_SECRET_KEY)
 backpack_public = PublicClient()
