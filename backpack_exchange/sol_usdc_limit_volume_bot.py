@@ -185,7 +185,8 @@ def run_volume_loop():
                 time.sleep(random.uniform(6, 10))  # 成交后等待
 
         except Exception as e:
-            print(f"发生异常: {e}")
+            print(f"发生异常: {e}, 取消所有挂单")
+            cancel_all_orders()
             time.sleep(5)
 
 
