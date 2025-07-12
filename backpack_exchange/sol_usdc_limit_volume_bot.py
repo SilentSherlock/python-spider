@@ -1,15 +1,16 @@
 import random
-import time
 import threading
+import time
+
 from backpack_exchange_sdk.authenticated import AuthenticationClient
 from backpack_exchange_sdk.public import PublicClient
 from enums.RequestEnums import OrderType, OrderSide, TimeInForce, MarketType
 
-from backpack_exchange.trade_prepare import proxy_on, load_backpack_api_keys
+from backpack_exchange.trade_prepare import proxy_on, load_backpack_api_keys_trade_cat
 
 proxy_on()
 
-public_key, secret_key = load_backpack_api_keys()
+public_key, secret_key = load_backpack_api_keys_trade_cat()
 client = AuthenticationClient(public_key, secret_key)
 public = PublicClient()
 
@@ -191,7 +192,7 @@ def run_volume_loop():
 if __name__ == "__main__":
 
     threads = []
-    for _ in range(2):
+    for _ in range(1):
         t = threading.Thread(target=run_volume_loop, name=f"VolumeThread-{_ + 1}")
         t.start()
         time.sleep(random.uniform(8, 15))  # 随机等待8，15s

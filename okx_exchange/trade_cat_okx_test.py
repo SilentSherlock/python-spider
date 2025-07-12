@@ -4,11 +4,12 @@ from okx import Funding, Trade, PublicData
 import okx.Account as Account
 
 from arbitrage_bot.backpack_okx_arbitrage_bot import get_okx_funding_rate, SYMBOL_MAP
-from backpack_exchange.trade_prepare import proxy_on, load_okx_api_keys, load_okx_api_keys_test
+from backpack_exchange.trade_prepare import (proxy_on, load_okx_api_keys_trade_cat_okx,
+                                             load_okx_api_keys_trade_cat_okx_test)
 
 proxy_on()  # 启用代理（如果需要）
-OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE = load_okx_api_keys()
-OKX_API_KEY_TEST, OKX_SECRET_KEY_TEST, OKX_PASSPHRASE_TEST = load_okx_api_keys_test()
+OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE = load_okx_api_keys_trade_cat_okx()
+OKX_API_KEY_TEST, OKX_SECRET_KEY_TEST, OKX_PASSPHRASE_TEST = load_okx_api_keys_trade_cat_okx_test()
 
 okx_live_trading = "0"
 okx_test_trading = "1"
@@ -93,6 +94,7 @@ okx_ticker = okx_public_api_test.get_instruments(instType="SWAP", instId="SOL-US
 symbol_lotsz_minsz_map = {}
 for symbol in SYMBOL_MAP.keys():
     ticker_info = okx_public_api_test.get_instruments(instType="SWAP", instId=symbol)
+    print(f"Ticker Info for {symbol}: {ticker_info}")
     if ticker_info and ticker_info.get("code") == "0" and ticker_info.get("data"):
         data = ticker_info["data"][0]
         ctVal = data.get("ctVal")
