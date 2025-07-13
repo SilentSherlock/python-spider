@@ -264,9 +264,10 @@ def check_okx_order_filled(symbol, order_id, max_attempts=30, interval=1):
 
 
 # 在 OKX 上根据订单ID进行合约平仓
-def close_okx_position_by_order_id(symbol, order_id):
+def close_okx_position_by_order_id(symbol, order_id, okx_qty):
     """
     根据订单ID平仓：查询订单，获取参数，反向下单
+    :param okx_qty: 平仓数量，如果传入None，则使用订单中的数量
     :param symbol: 合约标的
     :param order_id: 需平仓的订单ID
     """
@@ -277,7 +278,7 @@ def close_okx_position_by_order_id(symbol, order_id):
     data = order_info["data"][0]
     pos_side = data.get("posSide", "net")
     side = data["side"]
-    qty = data["sz"]
+    qty = data["sz"] if okx_qty is None else okx_qty  # 如果传入了数量，则使用传入的数量，否则使用订单中的数量
     price = data.get("px", None)
     # ord_type = data.get("ordType", "market")
     ord_type = "market"  # 默认使用市价单平仓
@@ -357,9 +358,10 @@ def check_backpack_order_filled(symbol, order_id, max_attempts=30, interval=1):
 
 
 # 在backpack 上进行合约平仓（通过订单ID反向下单）,开仓后才可平仓，合约挂单未成交不算平仓
-def close_backpack_position_by_order_id(symbol, order_id):
+def close_backpack_position_by_order_id(symbol, order_id, backpack_qty=None):
     """
     根据订单ID平仓：查询订单，获取参数，反向下单
+    :param backpack_qty:
     :param symbol:
     :param order_id: 需平仓的订单ID
     """
@@ -371,7 +373,7 @@ def close_backpack_position_by_order_id(symbol, order_id):
     print(f"[Backpack] 查询到订单信息: {order_info}")
     symbol = order_info["symbol"]
     side = order_info["side"]
-    qty = order_info["quantity"]
+    qty = order_info["quantity"] if backpack_qty is None else backpack_qty  # 如果传入了数量，则使用传入的数量，否则使用订单中的数量
     price = order_info["price"]
     # order_type = order_info.get("orderType", OrderType.MARKET)
     order_type = OrderType.MARKET  # 默认使用市价单平仓
@@ -445,6 +447,7 @@ def arbitrage_loop():
 
                         # 平台开单逻辑，okx先尝试开单三次，成功则进行Backpack开单，不成功抛出异常，外层再重试一次
                         # backpack开单逻辑，okx开单成功后，检查订单是否成交，成交则进行Backpack开单，同样尝试三次
+                        # 修正，调换顺序，先Backpack开单，成交后再开单okx，先开仓流动性差的
                         # continue
                         try:
                             # 子try catch 1: OKX下单
@@ -477,7 +480,7 @@ def arbitrage_loop():
                                     time.sleep(2)
                         except Exception as e:
                             print(f"[异常] 执行开仓失败: {e}, 正在取消OKX和Backpack所有当前标的开单并重试...")
-                            # 取消OKX当前标的所有开单
+                            # 取消OKX当前标的所有开单，先关仓流动性好的，避免损失
                             try:
                                 open_orders = okx_trade_api.get_order_list(instId=r["okx_symbol"])
                                 if open_orders and open_orders.get("code") == "0":
@@ -540,9 +543,12 @@ def arbitrage_loop():
                     print("\n>> 到达应收益时点，开始平仓")
                     time.sleep(40)  # 等待40秒，确保资金费率结算完成
 
-                    close_okx_position_by_order_id(symbol=open_info["okx_symbol"], order_id=open_info["okx_order_id"])
+                    close_okx_position_by_order_id(symbol=open_info["okx_symbol"],
+                                                   order_id=open_info["okx_order_id"],
+                                                   okx_qty=open_info["okx_qty"])
                     close_backpack_position_by_order_id(symbol=open_info["backpack_symbol"],
-                                                        order_id=open_info["backpack_order_id"])
+                                                        order_id=open_info["backpack_order_id"],
+                                                        backpack_qty=open_info["backpack_qty"])
                     print("[OKX]平仓", open_info["okx_symbol"])
                     print("[Backpack]平仓", open_info["backpack_symbol"])
 
@@ -576,9 +582,12 @@ def arbitrage_loop():
             print("[异常]", e)
             print("正在取消所有当前标的开单并重试...")
             if is_open:
-                close_okx_position_by_order_id(symbol=open_info["okx_symbol"], order_id=open_info["okx_order_id"])
+                close_okx_position_by_order_id(symbol=open_info["okx_symbol"],
+                                               order_id=open_info["okx_order_id"],
+                                               okx_qty=open_info["okx_qty"])
                 close_backpack_position_by_order_id(symbol=open_info["backpack_symbol"],
-                                                    order_id=open_info["backpack_order_id"])
+                                                    order_id=open_info["backpack_order_id"],
+                                                    backpack_qty=open_info["backpack_qty"])
             break
 
 
