@@ -154,11 +154,11 @@ def run_volume_loop():
                 low_price = round(last_price * (1 - SLIPPAGE), 2)
                 high_price = round(last_price * (1 + SLIPPAGE), 2)
                 # base_price = low_price
-                base_price = low_price if side == "BUY" else last_price
+                base_price = low_price if side == "BUY" else high_price
 
                 usd_value = round(random.uniform(MIN_ORDER_USD, MAX_ORDER_USD), 2)
                 quantity = round(usd_value / base_price, 2)
-
+                print(f"当前时间: {time.strftime('%Y-%m-%d %H:%M:%S')}, 下单价格: {base_price}, 下单数量: {quantity}, 方向: {side}")
                 if not TEST_FLAG:
                     # 交易之前先判断当前单是否有足够流动性进行
                     check_result = check_balance(base_price, quantity, side)
@@ -167,7 +167,8 @@ def run_volume_loop():
                         return
                         # 挂单买入，吃单卖出
                     if check_result == "SELL":
-                        order = place_market_order(quantity, check_result)
+                        # order = place_market_order(quantity, check_result)
+                        order = place_limit_order(base_price, quantity, check_result)
                     else:
                         order = place_limit_order(base_price, quantity, check_result)
                 else:
