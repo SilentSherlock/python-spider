@@ -55,11 +55,23 @@ def load_backpack_api_keys_trade_cat_funding(
     return load_backpack_api_keys(path)
 
 
+# 从本地文件读取backpack API Key 和 Secret，现货刷量子账户
+def load_backpack_api_keys_trade_cat_volume(
+        path="C:\\Users\\15361\\OneDrive\\文档\\finance\\api\\backpack\\TradeCat-Volume.txt"):
+    """
+    从默认路径读取backpack API Key 和 Secret，现货刷量子账户
+    :param path: 文件路径，默认为本地文件路径
+    :return: 返回API Key和Secret
+    """
+    return load_backpack_api_keys(path)
+
+
 # 从给定路径读取okx api key等参数
 def load_okx_api_keys_trade_cat_okx(path="C:\\Users\\15361\\OneDrive\\文档\\finance\\api\\okx\\TradeCat-OKX.txt"):
     return load_okx_api_keys(path)
 
 
 # 从给定路径读取okx api key等参数，模拟交易
-def load_okx_api_keys_trade_cat_okx_test(path="C:\\Users\\15361\\OneDrive\\文档\\finance\\api\\okx\\TradeCat-OKX-Test.txt"):
+def load_okx_api_keys_trade_cat_okx_test(
+        path="C:\\Users\\15361\\OneDrive\\文档\\finance\\api\\okx\\TradeCat-OKX-Test.txt"):
     return load_okx_api_keys(path)
