@@ -291,7 +291,7 @@ if __name__ == "__main__":
     bollinger_trade_loop(symbol=SYMBOL)
     # 现货交易
     threads = []
-    for _ in range(2):
+    for _ in range(1):
         t = threading.Thread(target=run_volume_loop, name=f"VolumeThread-{_ + 1}")
         t.start()
         time.sleep(random.uniform(8, 15))  # 随机等待8，15s
