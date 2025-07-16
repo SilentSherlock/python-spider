@@ -15,7 +15,6 @@ client = AuthenticationClient(public_key, secret_key)
 public = PublicClient()
 
 SYMBOL = "SOL_USDC_PERP"
-INTERVAL = "1m"  # K线周期
 WINDOW_short = 4
 WINDOW_long = 8
 OPEN_INTERVAL_SEC = 5 * 60  # 每5分钟执行一次
