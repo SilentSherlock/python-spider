@@ -109,7 +109,7 @@ def wait_for_fill_test(order_id):
     return False
 
 
-def check_balance(price, quantity, side):
+def check_balance(price, quantity, side, trade_type="SPOT"):
     """检查账户余额是否足够，足够，返回交易方向，不足够，返回False"""
     balances = client.get_balances()
     sol_balance = float(balances.get("SOL", {}).get("available", 0))
@@ -130,8 +130,52 @@ def check_balance(price, quantity, side):
         print(f"账户余额足够进行卖出: SOL={sol_balance}, 需要={sol_need}")
         return "SELL"
 
-    # 买入或卖出不满足，进行反向交易
-    return "SELL" if side == "BUY" else "BUY"
+    # 现货买入或卖出不满足，进行反向交易, 布林带交易返回fase
+    if trade_type == "SPOT":
+        return "SELL" if side == "BUY" else "BUY"
+    elif trade_type == "bollinger":
+        return False
+
+
+def get_kline(symbol, interval, start_time, end_time):
+    """
+    获取某个标的在某段时间的K线图
+    :param symbol: 标的，如"BTC_USDC"
+    :param interval: K线间隔，如"1m", "5m", "1h"
+    :param start_time: 开始时间，时间戳（秒）
+    :param end_time: 结束时间，时间戳（秒）
+    :return: K线数据列表
+    """
+    return public.get_klines(
+        symbol=symbol,
+        interval=interval,
+        start_time=start_time,
+        end_time=end_time
+    )
+
+
+def calculate_bollinger_bands(kline_data, window=20, num_std=2):
+    """
+    根据给定的K线数据计算布林轨道
+    :param kline_data: K线数据列表，每个元素为dict，需包含"close"字段
+    :param window: 均线窗口大小，默认20
+    :param num_std: 标准差倍数，默认2
+    :return: 返回一个列表，每个元素为dict，包含'middle', 'upper', 'lower'
+    """
+    closes = [float(item["close"]) for item in kline_data]
+    bands = []
+    for i in range(window - 1, len(closes)):
+        window_closes = closes[i - window + 1:i + 1]
+        ma = sum(window_closes) / window
+        std = (sum((x - ma) ** 2 for x in window_closes) / window) ** 0.5
+        upper = ma + num_std * std
+        lower = ma - num_std * std
+        bands.append({
+            "middle": round(ma, 6),
+            "upper": round(upper, 6),
+            "lower": round(lower, 6)
+        })
+    return bands
 
 
 def run_volume_loop():
@@ -158,7 +202,8 @@ def run_volume_loop():
 
                 usd_value = round(random.uniform(MIN_ORDER_USD, MAX_ORDER_USD), 2)
                 quantity = round(usd_value / base_price, 2)
-                print(f"当前时间: {time.strftime('%Y-%m-%d %H:%M:%S')}, 下单价格: {base_price}, 下单数量: {quantity}, 方向: {side}")
+                print(
+                    f"当前时间: {time.strftime('%Y-%m-%d %H:%M:%S')}, 下单价格: {base_price}, 下单数量: {quantity}, 方向: {side}")
                 if not TEST_FLAG:
                     # 交易之前先判断当前单是否有足够流动性进行
                     check_result = check_balance(base_price, quantity, side)
@@ -191,8 +236,60 @@ def run_volume_loop():
             time.sleep(5)
 
 
+def bollinger_trade_loop(symbol="SOL_USDC"):
+    interval = "30m"
+    while True:
+        try:
+            end_time = int(time.time())
+            start_time = end_time - 100 * 30 * 60  # 100根30mK线
+            kline_data = get_kline(symbol, interval, start_time, end_time)
+            if len(kline_data) < 20:
+                print("K线数据不足，跳过本轮")
+                time.sleep(1800)
+                continue
+            bands = calculate_bollinger_bands(kline_data)
+            last_band = bands[-1]  # 获取最新的布林带数据
+            last_price = get_last_price()
+            print(f"当前价格: {last_price}, 布林带: {last_band}")
+            if last_price <= last_band["lower"]:
+                print("价格低于布林带下轨，买入")
+                usd_value = round(random.uniform(MIN_ORDER_USD, MAX_ORDER_USD), 2)
+                quantity = round(usd_value / last_price, 2)
+                if not TEST_FLAG:
+                    check_result = check_balance(last_price, quantity, "BUY", "bollinger")
+                    if check_result == "BUY":
+                        order = place_limit_order(last_price, quantity, "BUY")
+                        order_id = order.get("id")
+                        if order_id:
+                            wait_for_fill(order_id)
+                else:
+                    order = place_limit_order_test(last_price, quantity, "BUY")
+            elif last_price >= last_band["upper"]:
+                print("价格高于布林带上轨，卖出")
+                usd_value = round(random.uniform(MIN_ORDER_USD, MAX_ORDER_USD), 2)
+                quantity = round(usd_value / last_price, 2)
+                if not TEST_FLAG:
+                    check_result = check_balance(last_price, quantity, "SELL", "bollinger")
+                    if check_result == "SELL":
+                        order = place_limit_order(last_price, quantity, "SELL")
+                        order_id = order.get("id")
+                        if order_id:
+                            wait_for_fill(order_id)
+                else:
+                    order = place_limit_order_test(last_price, quantity, "SELL")
+            else:
+                print("价格在布林带区间内，暂不操作")
+            time.sleep(1800)  # 30分钟
+        except Exception as e:
+            print(f"发生异常: {e}")
+            time.sleep(60)
+
+
 if __name__ == "__main__":
 
+    # 布林带交易
+    bollinger_trade_loop(symbol=SYMBOL)
+    # 现货交易
     threads = []
     for _ in range(2):
         t = threading.Thread(target=run_volume_loop, name=f"VolumeThread-{_ + 1}")
