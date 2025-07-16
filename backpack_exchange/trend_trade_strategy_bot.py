@@ -19,7 +19,7 @@ WINDOW_short = 4
 WINDOW_long = 8
 OPEN_INTERVAL_SEC = 5 * 60  # 每5分钟执行一次
 MARGIN = 30  # 保证金
-LEVERAGE = 10
+LEVERAGE = 15
 LOSS_LIMIT = 0.2  # 亏损20%止损
 PROFIT_DRAWBACK = 0.2  # 盈利回撤20%止盈保护
 
@@ -49,7 +49,7 @@ def monitor_position(backpack_price, direction, order_id, backpack_qty, leverage
             else ((current_price - peak_price) / peak_price * leverage)
 
         print(
-            f"当前价格: {current_price:.4f}, 杠杆盈亏: {pnl:.4%}, 杠杆回撤: {drawdown:.2%}")
+            f"当前价格: {current_price:.4f}, direction,{direction} 杠杆盈亏: {pnl:.4%}, 杠杆回撤: {drawdown:.2%}")
 
         if pnl <= -0.2:
             print(f"止损触发，亏损金额: {(backpack_price - current_price) * float(backpack_qty):.4f} USDC")
@@ -87,7 +87,7 @@ def get_open_direction_15mkline():
     k1, k2 = klines[-2], klines[-1]
     up = float(k1['close']) > float(k1['open']) and float(k2['close']) > float(k2['open'])
     down = float(k1['close']) < float(k1['open']) and float(k2['close']) < float(k2['open'])
-    print(f"15分钟K线判断: k1 high:{k1['high']}, k1 low:{k1['low']}, k2 high:{k2['high']}, k2 low{k2['low']}"
+    print(f"15分钟K线判断: k1 open:{k1['open']}, k1 close:{k1['close']}, k2 open:{k2['open']}, k2 close{k2['close']}"
           f", up: {up}, down: {down}")
     if up:
         return "long"
