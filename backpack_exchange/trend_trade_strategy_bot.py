@@ -18,7 +18,7 @@ SYMBOL = "SOL_USDC_PERP"
 INTERVAL = "1m"  # K线周期
 WINDOW_short = 4
 WINDOW_long = 8
-OPEN_INTERVAL_SEC = 5 * 60  # 每5分钟执行一次
+OPEN_INTERVAL_SEC = 10 * 60  # 每10分钟执行一次
 MARGIN = 30  # 保证金
 LEVERAGE = 10
 LOSS_LIMIT = 0.2  # 亏损20%止损
@@ -80,7 +80,8 @@ def monitor_position(backpack_price, direction, order_id, backpack_qty, leverage
 # 两根15分钟k线判断方法
 def get_open_direction_15mkline():
     # 两根15分钟k线判断
-    end_time = int(time.time())
+    now = time.localtime()
+    end_time = int(time.mktime((now.tm_year, now.tm_mon, now.tm_mday, now.tm_hour, now.tm_min // 15 * 15, 0, 0, 0, -1)))
     start_time = end_time - 2 * 15 * 60
     interval = "15m"
     klines = get_kline(SYMBOL, interval, start_time, end_time)
