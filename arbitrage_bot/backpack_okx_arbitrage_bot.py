@@ -303,12 +303,12 @@ def close_okx_position_by_order_id(symbol, order_id, okx_qty):
 
 
 # 在backpack 上执行合约下单，待优化，设置止损
-def execute_backpack_order(symbol, side, qty, price, order_type=OrderType.MARKET):
+def execute_backpack_order(symbol, side, qty, price, order_type=OrderType.MARKET, leverage=MAX_LEVERAGE):
     if side not in ["long", "short"]:
         raise ValueError("Backpack 下单方向必须是 'long' 或 'short'")
     # 设置合约交易参数
     backpack_client.update_account(
-        leverageLimit=str(MAX_LEVERAGE)  # 杠杆倍数
+        leverageLimit=str(leverage)  # 杠杆倍数
     )
 
     # 执行下单
