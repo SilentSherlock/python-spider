@@ -84,7 +84,11 @@ def monitor_position(backpack_price, direction, order_id, backpack_qty, leverage
                 print("最近六次价格曲线趋向于直线，平仓")
                 break
     # 关仓
-    print(f"准备平仓: {monitor_symbol}, 方向: {direction}, 数量: {backpack_qty}, 盈亏: {abs((current_price - backpack_price)) * float(backpack_qty):.4f} USDC")
+    # 计算盈亏
+    profit = float(backpack_qty) * (current_price - backpack_price) if direction == 'long' \
+        else float(backpack_qty) * (backpack_price - current_price)
+    print(f"准备平仓: {monitor_symbol}, 方向: {direction}, 数量: {backpack_qty}, "
+          f"盈亏: {profit :.4f} USDC")
     close_backpack_position_by_order_id(monitor_symbol, order_id, backpack_qty)
 
 
@@ -99,7 +103,7 @@ def get_open_direction_15mkline(kline_symbol=SYMBOL):
     k1, k2 = klines[-2], klines[-1]
     up = float(k1['close']) > float(k1['open']) and float(k2['close']) > float(k2['open'])
     down = float(k1['close']) < float(k1['open']) and float(k2['close']) < float(k2['open'])
-    print(f"15分钟K线判断: k1 open:{k1['open']}, k1 close:{k1['close']}, k2 open:{k2['open']}, k2 close：{k2['close']}"
+    print(f"15分钟K线判断: symbol: {kline_symbol} k1 open:{k1['open']}, k1 close:{k1['close']}, k2 open:{k2['open']}, k2 close：{k2['close']}"
           f", up: {up}, down: {down}")
     if up:
         return "long"
@@ -115,7 +119,7 @@ def run_strategy(run_symbol=SYMBOL):
     backpack_qty = None
     while True:
         try:
-            direction = get_open_direction_15mkline()
+            direction = get_open_direction_15mkline(run_symbol)
             if in_position:
                 print("已有持仓，跳过开仓")
             else:
@@ -152,7 +156,7 @@ if __name__ == "__main__":
     threads = []
     for symbol in TREND_SYMBOL_LIST:
         print(f"开始进行 {symbol} 的趋势交易策略")
-        t = threading.Thread(target=run_strategy(symbol), name=f"TrendTradeStrategy-{symbol}")
+        t = threading.Thread(target=run_strategy, args=(symbol, ), name=f"TrendTradeStrategy-{symbol}")
         t.start()
         time.sleep(random.uniform(60, 90))
         threads.append(t)
