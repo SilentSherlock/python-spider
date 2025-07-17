@@ -3,6 +3,7 @@ import threading
 import time
 
 import numpy as np
+import talib
 from backpack_exchange_sdk.authenticated import AuthenticationClient
 from backpack_exchange_sdk.public import PublicClient
 from enums.RequestEnums import OrderType
@@ -36,7 +37,7 @@ PROFIT_DRAWBACK = 0.1  # 盈利回撤10%止盈保护
 def monitor_position(backpack_price, direction, order_id, backpack_qty, leverage=LEVERAGE, monitor_symbol=SYMBOL):
     peak_price = backpack_price
     price_history = [backpack_price]
-
+    # todo 优化监控方法，增加移动止损
     while True:
         time.sleep(60)
         current_price = float(public.get_ticker(monitor_symbol)['lastPrice'])
@@ -101,8 +102,9 @@ def get_open_direction_15mkline(kline_symbol=SYMBOL):
     k1, k2 = klines[-2], klines[-1]
     up = float(k1['close']) > float(k1['open']) and float(k2['close']) > float(k2['open'])
     down = float(k1['close']) < float(k1['open']) and float(k2['close']) < float(k2['open'])
-    print(f"15分钟K线判断: symbol: {kline_symbol} k1 open:{k1['open']}, k1 close:{k1['close']}, k2 open:{k2['open']}, k2 close：{k2['close']}"
-          f", up: {up}, down: {down}")
+    print(
+        f"15分钟K线判断: symbol: {kline_symbol} k1 open:{k1['open']}, k1 close:{k1['close']}, k2 open:{k2['open']}, k2 close：{k2['close']}"
+        f", up: {up}, down: {down}")
     if up:
         return "long"
     elif down:
@@ -111,13 +113,64 @@ def get_open_direction_15mkline(kline_symbol=SYMBOL):
         return False
 
 
+# 获取K线数据，默认返回30根5分钟K线
+def fetch_klines(symbol, interval="5m"):
+    end_time = int(time.time())  # 当前时间戳，单位秒
+    start_time = end_time - 30 * 5 * 60  # 30根5分钟K线
+    kline_data = public.get_klines(symbol, interval, start_time, end_time)
+    closes = np.array([float(k["close"]) for k in kline_data])
+    volumes = np.array([float(k["volume"]) for k in kline_data])
+    return closes, volumes
+
+
+# 策略 1：均线突破 + 放量确认
+def ma_volume_strategy(symbol):
+    closes, volumes = fetch_klines(symbol)
+
+    ema9 = talib.EMA(closes, timeperiod=9)
+    ema21 = talib.EMA(closes, timeperiod=21)
+
+    # 金叉
+    if ema9[-2] < ema21[-2] and ema9[-1] > ema21[-1]:
+        if volumes[-1] > np.mean(volumes[-6:-1]):
+            return "long"
+
+    # 死叉
+    if ema9[-2] > ema21[-2] and ema9[-1] < ema21[-1]:
+        if volumes[-1] > np.mean(volumes[-6:-1]):
+            return "short"
+
+    return False
+
+
+# 策略 2：MACD 金叉/死叉 + 放量确认
+def macd_volume_strategy(symbol):
+    closes, volumes = fetch_klines(symbol)
+
+    macd, signal, _ = talib.MACD(closes, fastperiod=12, slowperiod=26, signalperiod=9)
+
+    # 金叉
+    if macd[-2] < signal[-2] and macd[-1] > signal[-1]:
+        if volumes[-1] > np.mean(volumes[-6:-1]):
+            return "long"
+
+    # 死叉
+    if macd[-2] > signal[-2] and macd[-1] < signal[-1]:
+        if volumes[-1] > np.mean(volumes[-6:-1]):
+            return "short"
+
+    return False
+
+
 def run_strategy(run_symbol=SYMBOL):
     in_position = False
+
     backpack_order_id = None
     backpack_qty = None
     while True:
         try:
-            direction = get_open_direction_15mkline(run_symbol)
+            # direction = get_open_direction_15mkline(run_symbol)
+            direction = ma_volume_strategy(run_symbol)
             if in_position:
                 print("已有持仓，跳过开仓")
             else:
@@ -154,7 +207,7 @@ if __name__ == "__main__":
     threads = []
     for symbol in TREND_SYMBOL_LIST:
         print(f"开始进行 {symbol} 的趋势交易策略")
-        t = threading.Thread(target=run_strategy, args=(symbol, ), name=f"TrendTradeStrategy-{symbol}")
+        t = threading.Thread(target=run_strategy, args=(symbol,), name=f"TrendTradeStrategy-{symbol}")
         t.start()
         time.sleep(random.uniform(60, 90))
         threads.append(t)
