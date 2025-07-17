@@ -237,11 +237,11 @@ def run_volume_loop():
 
 
 def bollinger_trade_loop(symbol="SOL_USDC"):
-    interval = "30m"
+    interval = "15m"
     while True:
         try:
             end_time = int(time.time())
-            start_time = end_time - 100 * 30 * 60  # 100根30mK线
+            start_time = end_time - 100 * 15 * 60  # 100根15mK线
             kline_data = get_kline(symbol, interval, start_time, end_time)
             if len(kline_data) < 20:
                 print("K线数据不足，跳过本轮")

@@ -1,7 +1,7 @@
 import random
 import threading
 import time
-
+import math
 import numpy as np
 import talib
 from backpack_exchange_sdk.authenticated import AuthenticationClient
@@ -11,6 +11,7 @@ from enums.RequestEnums import OrderType
 from arbitrage_bot.backpack_okx_arbitrage_bot import execute_backpack_order, close_backpack_position_by_order_id
 from backpack_exchange.sol_usdc_limit_volume_bot import get_kline
 from backpack_exchange.trade_prepare import proxy_on, load_backpack_api_keys_trade_cat_funding
+from backpack_exchange.trend_trade_strategy_ema_bot import monitor_position_with_ema_exit
 
 # 启用代理与加载密钥
 proxy_on()
@@ -30,64 +31,71 @@ TREND_SYMBOL_LIST = [
 OPEN_INTERVAL_SEC = 5 * 60  # 每5分钟执行一次
 MARGIN = 50  # 保证金
 LEVERAGE = 15
-LOSS_LIMIT = 0.2  # 亏损20%止损
+LOSS_LIMIT = -0.05  # 亏损5%止损
+PROFIT_LIMIT = 0.3  # 盈利30%止盈
 PROFIT_DRAWBACK = 0.1  # 盈利回撤10%止盈保护
 
 
 def monitor_position(backpack_price, direction, order_id, backpack_qty, leverage=LEVERAGE, monitor_symbol=SYMBOL):
-    peak_price = backpack_price
     price_history = [backpack_price]
-    # todo 优化监控方法，增加移动止损
+    max_pnl = 0  # 记录最高盈利百分比（含杠杆）
+    monitor_interval = 25  # 监控间隔时间（秒）
+    monitor_points = 9  # 监控点数量
+
     while True:
-        time.sleep(60)
+        time.sleep(monitor_interval)
         current_price = float(public.get_ticker(monitor_symbol)['lastPrice'])
         price_history.append(current_price)
-        if len(price_history) > 6:
+        if len(price_history) > monitor_points:
             price_history.pop(0)
 
-        # 加上杠杆计算实际盈亏比例
+        # 当前盈亏（含杠杆）
         pnl = ((current_price - backpack_price) / backpack_price * leverage) if direction == 'long' \
             else ((backpack_price - current_price) / backpack_price * leverage)
 
-        if direction == 'long':
-            peak_price = max(peak_price, current_price)
-        else:
-            peak_price = min(peak_price, current_price)
+        # 更新最高盈利
+        max_pnl = max(max_pnl, pnl)
 
-        # 加上杠杆计算实际回撤比例
-        draw_down = ((peak_price - current_price) / peak_price * leverage) if direction == 'long' \
-            else ((current_price - peak_price) / peak_price * leverage)
+        # 盈利回撤（绝对值）
+        draw_down = max_pnl - pnl
 
         print(
-            f"当前{monitor_symbol}价格: {current_price:.4f}, 下单价格:{backpack_price}, direction: {direction} 杠杆盈亏: {pnl:.4%}, 杠杆回撤: {draw_down:.2%}")
+            f"当前{monitor_symbol}价格: {current_price:.4f}, 下单价格:{backpack_price}, direction: {direction} "
+            f"杠杆盈亏: {pnl:.4%}, 历史最高盈亏: {max_pnl:.4%}, 当前回撤: {draw_down:.4%}")
 
-        if pnl <= -0.2:
+        # 固定止损：大幅亏损触发强平
+        if pnl <= LOSS_LIMIT:
             print(f"止损触发，亏损金额: {(backpack_price - current_price) * float(backpack_qty):.4f} USDC")
             break
-        if pnl > 0 and draw_down >= PROFIT_DRAWBACK:
-            print(f"盈利回撤触发，当前盈利: {abs((current_price - backpack_price)) * float(backpack_qty):.4f} USDC")
+
+        # 固定止盈
+        if pnl >= PROFIT_LIMIT:
+            print(f"止盈触发，盈利金额: {abs(current_price - backpack_price) * float(backpack_qty):.4f} USDC")
             break
 
-        # 判断最近六个价格的趋势
-        if len(price_history) == 6:
-            x = list(range(6))
+        # 盈利超过4%，启动“降半止损”
+        if max_pnl >= 0.04:
+            stop_drawdown = math.ceil((max_pnl / 2) * 100) / 100  # 向上取整到小数点后两位
+            if draw_down >= stop_drawdown:
+                print(f"盈利降半止损触发：最高盈亏 {max_pnl:.2%} 回撤 {draw_down:.2%} >= 限制 {stop_drawdown:.2%}")
+                break
+
+        # 趋势判断平仓
+        if len(price_history) == monitor_points:
+            x = list(range(monitor_points))
             y = price_history
-            # 线性拟合，获取斜率
             k, _ = np.polyfit(x, y, 1)
-            # 判断趋势与方向相反
             if (direction == 'long' and k < 0) or (direction == 'short' and k > 0):
                 print("最近六次价格趋势与持仓方向相反，平仓")
                 break
-            # 判断趋势趋向于直线（斜率接近0）
             if abs(k) < 0.001:
                 print("最近六次价格曲线趋向于直线，平仓")
                 break
-    # 关仓
-    # 计算盈亏
+
+    # 平仓并打印盈亏
     profit = float(backpack_qty) * (current_price - backpack_price) if direction == 'long' \
         else float(backpack_qty) * (backpack_price - current_price)
-    print(f"准备平仓: {monitor_symbol}, 方向: {direction}, 数量: {backpack_qty}, "
-          f"盈亏: {profit :.4f} USDC")
+    print(f"准备平仓: {monitor_symbol}, 方向: {direction}, 数量: {backpack_qty}, 盈亏: {profit:.4f} USDC")
     close_backpack_position_by_order_id(monitor_symbol, order_id, backpack_qty)
 
 
@@ -124,7 +132,7 @@ def fetch_klines(symbol, interval="5m"):
 
 
 # 策略 1：均线突破 + 放量确认
-def ma_volume_strategy(symbol):
+def ma_volume_strategy(symbol, volume_flag=False):
     closes, volumes = fetch_klines(symbol)
 
     ema5 = talib.EMA(closes, timeperiod=5)
@@ -132,12 +140,16 @@ def ma_volume_strategy(symbol):
 
     # 金叉
     if ema5[-2] < ema10[-2] and ema5[-1] > ema10[-1]:
-        if volumes[-1] > np.mean(volumes[-6:-1]):
+        if volume_flag and volumes[-1] > np.mean(volumes[-6:-1]):
+            return "long"
+        else:
             return "long"
 
     # 死叉
     if ema5[-2] > ema10[-2] and ema5[-1] < ema10[-1]:
-        if volumes[-1] > np.mean(volumes[-6:-1]):
+        if volume_flag and volumes[-1] > np.mean(volumes[-6:-1]):
+            return "short"
+        else:
             return "short"
 
     return False
@@ -162,15 +174,19 @@ def macd_volume_strategy(symbol):
     return False
 
 
-def run_strategy(run_symbol=SYMBOL):
+def run_backpack_strategy(run_symbol,
+                          direction_detector, direction_detector_args=(), direction_detector_kwargs=None,
+                          ):
+    if direction_detector_kwargs is None:
+        direction_detector_kwargs = {}
     in_position = False
 
     backpack_order_id = None
     backpack_qty = None
     while True:
         try:
-            # direction = get_open_direction_15mkline(run_symbol)
-            direction = ma_volume_strategy(run_symbol)
+            direction = direction_detector(*direction_detector_args, **direction_detector_kwargs)
+            # direction = ma_volume_strategy(run_symbol)
             if in_position:
                 print("已有持仓，跳过开仓")
             else:
@@ -192,7 +208,10 @@ def run_strategy(run_symbol=SYMBOL):
                                                          leverage=LEVERAGE)
                 backpack_order_id = backpack_result.get('id')
                 in_position = True
-                monitor_position(backpack_price, direction, backpack_order_id, backpack_qty, LEVERAGE, run_symbol)
+                if direction_detector == get_open_direction_15mkline:
+                    monitor_position(backpack_price, direction, backpack_order_id, backpack_qty, LEVERAGE, run_symbol)
+                elif direction_detector == ma_volume_strategy:
+                    monitor_position_with_ema_exit(backpack_price, direction, backpack_order_id, backpack_qty)
                 backpack_order_id = None
                 backpack_qty = None
                 in_position = False
@@ -204,13 +223,17 @@ def run_strategy(run_symbol=SYMBOL):
 
 
 if __name__ == "__main__":
-    threads = []
-    for symbol in TREND_SYMBOL_LIST:
-        print(f"开始进行 {symbol} 的趋势交易策略")
-        t = threading.Thread(target=run_strategy, args=(symbol,), name=f"TrendTradeStrategy-{symbol}")
-        t.start()
-        time.sleep(random.uniform(60, 90))
-        threads.append(t)
-
-    for t in threads:
-        t.join()
+    run_backpack_strategy(run_symbol=SYMBOL,
+                          direction_detector=get_open_direction_15mkline,
+                          direction_detector_args=(SYMBOL,)
+                          )
+    # threads = []
+    # for symbol in TREND_SYMBOL_LIST:
+    #     print(f"开始进行 {symbol} 的趋势交易策略")
+    #     t = threading.Thread(target=run_strategy, args=(symbol,), name=f"TrendTradeStrategy-{symbol}")
+    #     t.start()
+    #     time.sleep(random.uniform(60, 90))
+    #     threads.append(t)
+    #
+    # for t in threads:
+    #     t.join()
