@@ -127,16 +127,16 @@ def fetch_klines(symbol, interval="5m"):
 def ma_volume_strategy(symbol):
     closes, volumes = fetch_klines(symbol)
 
-    ema9 = talib.EMA(closes, timeperiod=9)
-    ema21 = talib.EMA(closes, timeperiod=21)
+    ema5 = talib.EMA(closes, timeperiod=5)
+    ema10 = talib.EMA(closes, timeperiod=10)
 
     # 金叉
-    if ema9[-2] < ema21[-2] and ema9[-1] > ema21[-1]:
+    if ema5[-2] < ema10[-2] and ema5[-1] > ema10[-1]:
         if volumes[-1] > np.mean(volumes[-6:-1]):
             return "long"
 
     # 死叉
-    if ema9[-2] > ema21[-2] and ema9[-1] < ema21[-1]:
+    if ema5[-2] > ema10[-2] and ema5[-1] < ema10[-1]:
         if volumes[-1] > np.mean(volumes[-6:-1]):
             return "short"
 
