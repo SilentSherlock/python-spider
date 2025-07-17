@@ -75,3 +75,9 @@ def load_okx_api_keys_trade_cat_okx(path="C:\\Users\\15361\\OneDrive\\文档\\fi
 def load_okx_api_keys_trade_cat_okx_test(
         path="C:\\Users\\15361\\OneDrive\\文档\\finance\\api\\okx\\TradeCat-OKX-Test.txt"):
     return load_okx_api_keys(path)
+
+
+# 从给定路径读取okx api key等参数，趋势交易
+def load_okx_api_keys_trade_cat_okx_trend(
+        path="C:\\Users\\15361\\OneDrive\\文档\\finance\\api\\okx\\TradeCat-OKX-Trend-Strategy.txt"):
+    return load_okx_api_keys(path)
