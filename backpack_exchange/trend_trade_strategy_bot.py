@@ -152,7 +152,7 @@ if __name__ == "__main__":
     threads = []
     for symbol in TREND_SYMBOL_LIST:
         print(f"开始进行 {symbol} 的趋势交易策略")
-        t = threading.Thread(target=run_strategy, args=symbol, name=f"TrendTradeStrategy-{symbol}")
+        t = threading.Thread(target=run_strategy(symbol), name=f"TrendTradeStrategy-{symbol}")
         t.start()
         time.sleep(random.uniform(60, 90))
         threads.append(t)
