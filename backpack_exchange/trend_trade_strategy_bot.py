@@ -199,7 +199,7 @@ def run_backpack_strategy(run_symbol,
                     time.sleep(OPEN_INTERVAL_SEC)
                     continue
                 if direction is False:
-                    print("当前无明确开仓信号，等待下一周期")
+                    print(f"当前{run_symbol}无明确开仓信号，等待下一周期")
                     time.sleep(OPEN_INTERVAL_SEC)
                     continue
                 backpack_qty = str(round((MARGIN * LEVERAGE) / backpack_price, 2))

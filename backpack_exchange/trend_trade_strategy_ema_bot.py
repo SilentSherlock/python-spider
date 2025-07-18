@@ -1,3 +1,4 @@
+import random
 import threading
 
 import numpy as np
@@ -56,7 +57,8 @@ def monitor_position_with_ema_exit(backpack_price, direction, order_id, backpack
         draw_down = max_pnl - pnl
 
         print(
-            f"[监控] 当前价格: {current_price:.4f}, 开仓价: {backpack_price:.4f}, direction: {direction}, 杠杆盈亏: {pnl:.4%}, "
+            f"[监控] 当前{monitor_symbol}价格: {current_price:.4f}, 开仓价: {backpack_price:.4f}, direction: {direction},"
+            f" 杠杆盈亏: {pnl:.4%},"
             f"最大盈利: {max_pnl:.4%}, 当前回撤: {draw_down:.4%}")
 
         # 固定止损逻辑
@@ -102,7 +104,16 @@ def monitor_position_with_ema_exit(backpack_price, direction, order_id, backpack
 
 if __name__ == '__main__':
     from backpack_exchange.trend_trade_strategy_bot import run_backpack_strategy, ma_volume_strategy
-    run_backpack_strategy(run_symbol=SYMBOL,
-                          direction_detector=ma_volume_strategy,
-                          direction_detector_args=(SYMBOL,)
-                          )
+    threads = []
+    for symbol in TREND_SYMBOL_LIST:
+        thread = threading.Thread(target=run_backpack_strategy,
+                                  args=(symbol, ma_volume_strategy, (symbol,)))
+        threads.append(thread)
+        time.sleep(random.uniform(40, 70))
+        thread.start()
+    for thread in threads:
+        thread.join()
+    # run_backpack_strategy(run_symbol=SYMBOL,
+    #                       direction_detector=ma_volume_strategy,
+    #                       direction_detector_args=(SYMBOL,)
+    #                       )
