@@ -204,7 +204,7 @@ def run_backpack_strategy(run_symbol,
                     continue
                 backpack_qty = str(round((MARGIN * LEVERAGE) / backpack_price, 2))
                 backpack_result = execute_backpack_order(run_symbol, direction, backpack_qty, str(backpack_price),
-                                                         OrderType.LIMIThais,
+                                                         OrderType.LIMIT,
                                                          leverage=LEVERAGE)
                 backpack_order_id = backpack_result.get('id')
                 in_position = True
