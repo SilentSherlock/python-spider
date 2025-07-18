@@ -104,16 +104,16 @@ def monitor_position_with_ema_exit(backpack_price, direction, order_id, backpack
 
 if __name__ == '__main__':
     from backpack_exchange.trend_trade_strategy_bot import run_backpack_strategy, ma_volume_strategy
-    threads = []
-    for symbol in TREND_SYMBOL_LIST:
-        thread = threading.Thread(target=run_backpack_strategy,
-                                  args=(symbol, ma_volume_strategy, (symbol,)))
-        threads.append(thread)
-        time.sleep(random.uniform(40, 70))
-        thread.start()
-    for thread in threads:
-        thread.join()
-    # run_backpack_strategy(run_symbol=SYMBOL,
-    #                       direction_detector=ma_volume_strategy,
-    #                       direction_detector_args=(SYMBOL,)
-    #                       )
+    # threads = []
+    # for symbol in TREND_SYMBOL_LIST:
+    #     thread = threading.Thread(target=run_backpack_strategy,
+    #                               args=(symbol, ma_volume_strategy, (symbol,)))
+    #     threads.append(thread)
+    #     thread.start()
+    #     time.sleep(random.uniform(40, 70))
+    # for thread in threads:
+    #     thread.join()
+    run_backpack_strategy(run_symbol=SYMBOL,
+                          direction_detector=ma_volume_strategy,
+                          direction_detector_args=(SYMBOL,)
+                          )
