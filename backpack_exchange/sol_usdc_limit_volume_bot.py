@@ -109,11 +109,12 @@ def wait_for_fill_test(order_id):
     return False
 
 
-def check_balance(price, quantity, side, trade_type="SPOT"):
+def check_balance(check_symbol, price, quantity, side, trade_type="SPOT"):
     """检查账户余额是否足够，足够，返回交易方向，不足够，返回False"""
     balances = client.get_balances()
-    sol_balance = float(balances.get("SOL", {}).get("available", 0))
-    usdc_balance = float(balances.get("USDC", {}).get("available", 0))
+    check_symbols = check_symbol.split("_")
+    sol_balance = float(balances.get(check_symbols[0], {}).get("available", 0))
+    usdc_balance = float(balances.get(check_symbols[1], {}).get("available", 0))
     usdc_need = round(price * quantity, 2)
     sol_need = round(quantity, 2)
 
@@ -256,7 +257,7 @@ def bollinger_trade_loop(symbol="SOL_USDC"):
                 usd_value = round(random.uniform(MIN_ORDER_USD, MAX_ORDER_USD), 2)
                 quantity = round(usd_value / last_price, 2)
                 if not TEST_FLAG:
-                    check_result = check_balance(last_price, quantity, "BUY", "bollinger")
+                    check_result = check_balance(symbol, last_price, quantity, "BUY", "bollinger")
                     if check_result == "BUY":
                         order = place_limit_order(symbol, last_price, quantity, "BUY")
                         order_id = order.get("id")
