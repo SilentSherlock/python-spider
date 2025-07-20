@@ -13,8 +13,8 @@ proxy_on()
 public_key, secret_key = load_backpack_api_keys_trade_cat_volume()
 client = AuthenticationClient(public_key, secret_key)
 public = PublicClient()
-
-SYMBOL = "SOL_USDC"
+SYMBOL = "SOL_USDC"  # 交易标的
+SYMBOLS = ["BTC_USDC", "ETH_USDC", "SOL_USDC", "XRP_USDC", "SUI_USDC"]
 MIN_ORDER_USD = 30
 MAX_ORDER_USD = 50
 SLIPPAGE = 0.0001  # 0.01%
@@ -23,9 +23,9 @@ MAX_WAIT_COUNT = 10  # 最多轮询10次（大约40秒）
 TEST_FLAG = False  # 是否为测试模式
 
 
-def get_last_price():
+def get_last_price(symbol_price=SYMBOL):
     """获取SOL/USDC的最新价格"""
-    ticker = public.get_ticker(SYMBOL)
+    ticker = public.get_ticker(symbol_price)
     return float(ticker["lastPrice"])
 
 
@@ -52,13 +52,13 @@ def order_exists_in_range(order_list, min_usd, max_usd):
     return False
 
 
-def place_limit_order(price, qty, side):
+def place_limit_order(order_symbol, price, qty, side):
     """执行挂单，实操"""
     print(f"挂{side}限价单: 数量={qty}, 价格={price}")
     return client.execute_order(
         orderType=OrderType.LIMIT,
         side=OrderSide.BID if side == "BUY" else OrderSide.ASK,
-        symbol=SYMBOL,
+        symbol=order_symbol,
         price=str(price),
         quantity=str(qty),
         timeInForce=TimeInForce.GTC,
@@ -72,13 +72,13 @@ def place_limit_order_test(price, qty, side):
     return {"id": str(random.randint(100000, 999999)), "status": "PENDING"}
 
 
-def place_market_order(quantity, side):
+def place_market_order(order_symbol, quantity, side):
     """执行吃单（市价单）"""
     print(f"吃{side}市价单: 数量={quantity}")
     return client.execute_order(
         orderType=OrderType.MARKET,
         side=OrderSide.BID if side == "BUY" else OrderSide.ASK,
-        symbol=SYMBOL,
+        symbol=order_symbol,
         quantity=str(quantity),
         timeInForce=TimeInForce.IOC
     )
@@ -194,7 +194,7 @@ def run_volume_loop():
                     print(f"上一个订单未成交，跳过{side}操作")
                     filled = True
                     continue
-                last_price = get_last_price()
+                last_price = get_last_price(symbol)
                 low_price = round(last_price * (1 - SLIPPAGE), 2)
                 high_price = round(last_price * (1 + SLIPPAGE), 2)
                 # base_price = low_price
@@ -249,7 +249,7 @@ def bollinger_trade_loop(symbol="SOL_USDC"):
                 continue
             bands = calculate_bollinger_bands(kline_data)
             last_band = bands[-1]  # 获取最新的布林带数据
-            last_price = get_last_price()
+            last_price = get_last_price(symbol)
             print(f"当前价格: {last_price}, 布林带: {last_band}")
             if last_price <= last_band["lower"]:
                 print("价格低于布林带下轨，买入")
@@ -258,7 +258,7 @@ def bollinger_trade_loop(symbol="SOL_USDC"):
                 if not TEST_FLAG:
                     check_result = check_balance(last_price, quantity, "BUY", "bollinger")
                     if check_result == "BUY":
-                        order = place_limit_order(last_price, quantity, "BUY")
+                        order = place_limit_order(symbol, last_price, quantity, "BUY")
                         order_id = order.get("id")
                         if order_id:
                             wait_for_fill(order_id)
@@ -269,7 +269,7 @@ def bollinger_trade_loop(symbol="SOL_USDC"):
                 usd_value = round(random.uniform(MIN_ORDER_USD, MAX_ORDER_USD), 2)
                 quantity = round(usd_value / last_price, 2)
                 if not TEST_FLAG:
-                    check_result = check_balance(last_price, quantity, "SELL", "bollinger")
+                    check_result = check_balance(symbol, last_price, quantity, "SELL", "bollinger")
                     if check_result == "SELL":
                         order = place_limit_order(last_price, quantity, "SELL")
                         order_id = order.get("id")
@@ -288,14 +288,14 @@ def bollinger_trade_loop(symbol="SOL_USDC"):
 if __name__ == "__main__":
 
     # 布林带交易
-    bollinger_trade_loop(symbol=SYMBOL)
-    # 现货交易
-    # threads = []
-    # for _ in range(1):
-    #     t = threading.Thread(target=run_volume_loop, name=f"VolumeThread-{_ + 1}")
-    #     t.start()
-    #     time.sleep(random.uniform(8, 15))  # 随机等待8，15s
-    #     threads.append(t)
-    #
-    # for t in threads:
-    #     t.join()
+    # bollinger_trade_loop(symbol=SYMBOL)
+    # 布林带现货交易
+    threads = []
+    for symbol in SYMBOLS:
+        t = threading.Thread(target=bollinger_trade_loop, args=(symbol,))
+        t.start()
+        time.sleep(random.uniform(8, 15))  # 随机等待8，15s
+        threads.append(t)
+
+    for t in threads:
+        t.join()

@@ -1,9 +1,9 @@
+import math
 import random
 import threading
+import time
 
 import numpy as np
-import time
-import math
 from backpack_exchange_sdk.authenticated import AuthenticationClient
 from backpack_exchange_sdk.public import PublicClient
 
@@ -28,8 +28,8 @@ TREND_SYMBOL_LIST = [
 OPEN_INTERVAL_SEC = 5 * 60  # 每5分钟执行一次
 MARGIN = 50  # 保证金
 LEVERAGE = 15
-LOSS_LIMIT = -0.10  # 亏损10%止损
-PROFIT_LIMIT = 0.3  # 盈利30%止盈
+LOSS_LIMIT = -0.02  # 亏损2%止损
+PROFIT_LIMIT = 0.07  # 盈利30%止盈
 PROFIT_DRAWBACK = 0.1  # 盈利回撤10%止盈保护
 PROFIT_TRIGGER = 0.075  # 初始止盈目标：7.5%
 
@@ -103,17 +103,19 @@ def monitor_position_with_ema_exit(backpack_price, direction, order_id, backpack
 
 
 if __name__ == '__main__':
-    from backpack_exchange.trend_trade_strategy_bot import run_backpack_strategy, ma_volume_strategy
-    # threads = []
-    # for symbol in TREND_SYMBOL_LIST:
-    #     thread = threading.Thread(target=run_backpack_strategy,
-    #                               args=(symbol, ma_volume_strategy, (symbol,)))
-    #     threads.append(thread)
-    #     thread.start()
-    #     time.sleep(random.uniform(40, 70))
-    # for thread in threads:
-    #     thread.join()
-    run_backpack_strategy(run_symbol=SYMBOL,
-                          direction_detector=ma_volume_strategy,
-                          direction_detector_args=(SYMBOL,)
-                          )
+    from backpack_exchange.trend_trade_strategy_bot import run_backpack_strategy
+
+    threads = []
+    for symbol in TREND_SYMBOL_LIST:
+        thread = threading.Thread(target=run_backpack_strategy,
+                                  args=(symbol, "ma_volume_strategy"))
+        threads.append(thread)
+        thread.start()
+        print(f"[线程启动] {symbol} 策略已启动")
+        time.sleep(random.uniform(40, 70))
+    for thread in threads:
+        thread.join()
+    # run_backpack_strategy(run_symbol=SYMBOL,
+    #                       direction_detector="ma_volume_strategy",
+    #
+    #                       )

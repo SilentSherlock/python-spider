@@ -31,8 +31,8 @@ TREND_SYMBOL_LIST = [
 OPEN_INTERVAL_SEC = 5 * 60  # 每5分钟执行一次
 MARGIN = 50  # 保证金
 LEVERAGE = 15
-LOSS_LIMIT = -0.05  # 亏损5%止损
-PROFIT_LIMIT = 0.3  # 盈利30%止盈
+LOSS_LIMIT = -0.02  # 亏损2%止损
+PROFIT_LIMIT = 0.05  # 盈利5%止盈
 PROFIT_DRAWBACK = 0.1  # 盈利回撤10%止盈保护
 
 
@@ -175,17 +175,19 @@ def macd_volume_strategy(symbol):
 
 
 def run_backpack_strategy(run_symbol,
-                          direction_detector, direction_detector_args=(), direction_detector_kwargs=None,
+                          direction_detector
                           ):
-    if direction_detector_kwargs is None:
-        direction_detector_kwargs = {}
     in_position = False
 
     backpack_order_id = None
     backpack_qty = None
     while True:
         try:
-            direction = direction_detector(*direction_detector_args, **direction_detector_kwargs)
+            direction = None
+            if direction_detector == "get_open_direction_15mkline":
+                direction = get_open_direction_15mkline(run_symbol)
+            elif direction_detector == "ma_volume_strategy":
+                direction = ma_volume_strategy(run_symbol)
             # direction = ma_volume_strategy(run_symbol)
             if in_position:
                 print("已有持仓，跳过开仓")
@@ -208,10 +210,11 @@ def run_backpack_strategy(run_symbol,
                                                          leverage=LEVERAGE)
                 backpack_order_id = backpack_result.get('id')
                 in_position = True
-                if direction_detector == get_open_direction_15mkline:
+                if direction_detector == "get_open_direction_15mkline":
                     monitor_position(backpack_price, direction, backpack_order_id, backpack_qty, LEVERAGE, run_symbol)
-                elif direction_detector == ma_volume_strategy:
-                    monitor_position_with_ema_exit(backpack_price, direction, backpack_order_id, backpack_qty)
+                elif direction_detector == "ma_volume_strategy":
+                    monitor_position_with_ema_exit(backpack_price, direction, backpack_order_id, backpack_qty,
+                                                   LEVERAGE, run_symbol)
                 backpack_order_id = None
                 backpack_qty = None
                 in_position = False
@@ -223,17 +226,19 @@ def run_backpack_strategy(run_symbol,
 
 
 if __name__ == "__main__":
-    run_backpack_strategy(run_symbol=SYMBOL,
-                          direction_detector=get_open_direction_15mkline,
-                          direction_detector_args=(SYMBOL,)
-                          )
-    # threads = []
-    # for symbol in TREND_SYMBOL_LIST:
-    #     print(f"开始进行 {symbol} 的趋势交易策略")
-    #     t = threading.Thread(target=run_strategy, args=(symbol,), name=f"TrendTradeStrategy-{symbol}")
-    #     t.start()
-    #     time.sleep(random.uniform(60, 90))
-    #     threads.append(t)
-    #
-    # for t in threads:
-    #     t.join()
+    # run_backpack_strategy(run_symbol=SYMBOL,
+    #                       direction_detector=get_open_direction_15mkline,
+    #                       direction_detector_args=(SYMBOL,)
+    #                       )
+    threads = []
+    for symbol in TREND_SYMBOL_LIST:
+        print(f"开始进行 {symbol} 的趋势交易策略")
+        t = threading.Thread(target=run_backpack_strategy,
+                             args=(symbol, "get_open_direction_15mkline"),
+                             name=f"TrendTradeStrategy-{symbol}")
+        t.start()
+        time.sleep(random.uniform(60, 90))
+        threads.append(t)
+
+    for t in threads:
+        t.join()
