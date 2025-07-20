@@ -272,7 +272,7 @@ def bollinger_trade_loop(symbol="SOL_USDC"):
                 if not TEST_FLAG:
                     check_result = check_balance(symbol, last_price, quantity, "SELL", "bollinger")
                     if check_result == "SELL":
-                        order = place_limit_order(last_price, quantity, "SELL")
+                        order = place_limit_order(symbol, last_price, quantity, "SELL")
                         order_id = order.get("id")
                         if order_id:
                             wait_for_fill(order_id)
