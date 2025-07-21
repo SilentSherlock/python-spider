@@ -113,22 +113,22 @@ def check_balance(check_symbol, price, quantity, side, trade_type="SPOT"):
     """检查账户余额是否足够，足够，返回交易方向，不足够，返回False"""
     balances = client.get_balances()
     check_symbols = check_symbol.split("_")
-    sol_balance = float(balances.get(check_symbols[0], {}).get("available", 0))
+    target_balance = float(balances.get(check_symbols[0], {}).get("available", 0))
     usdc_balance = float(balances.get(check_symbols[1], {}).get("available", 0))
     usdc_need = round(price * quantity, 2)
-    sol_need = round(quantity, 2)
+    target_need = round(quantity, 2)
 
     # sol的量和usdc的量均不足以进行交易
-    if sol_need > sol_balance and usdc_need > usdc_balance:
-        print(f"账户余额不足: SOL={sol_balance}, USDC={usdc_balance}, 需要: SOL={sol_need}, USDC={usdc_need}")
+    if target_need > target_balance and usdc_need > usdc_balance:
+        print(f"账户余额不足: SOL={target_balance}, USDC={usdc_balance}, 需要: SOL={target_need}, USDC={usdc_need}")
         return False
 
     # 买入或卖出均满足
     if side == "BUY" and usdc_need <= usdc_balance:
         print(f"账户余额足够进行买入: USDC={usdc_balance}, 需要={usdc_need}")
         return "BUY"
-    if side == "SELL" and sol_need <= sol_balance:
-        print(f"账户余额足够进行卖出: SOL={sol_balance}, 需要={sol_need}")
+    if side == "SELL" and target_need <= target_balance:
+        print(f"账户余额足够进行卖出: {check_symbols[0]}={target_balance}, 需要={target_need}")
         return "SELL"
 
     # 现货买入或卖出不满足，进行反向交易, 布林带交易返回fase
