@@ -121,10 +121,10 @@ def get_open_direction_15mkline(kline_symbol=SYMBOL):
         return False
 
 
-# 获取K线数据，默认返回30根5分钟K线
-def fetch_klines(symbol, interval="5m"):
+# 获取K线数据，默认返回30根15分钟K线
+def fetch_klines(symbol, interval="15m"):
     end_time = int(time.time())  # 当前时间戳，单位秒
-    start_time = end_time - 30 * 5 * 60  # 30根5分钟K线
+    start_time = end_time - 30 * 15 * 60  # 30根15分钟K线
     kline_data = public.get_klines(symbol, interval, start_time, end_time)
     closes = np.array([float(k["close"]) for k in kline_data])
     volumes = np.array([float(k["volume"]) for k in kline_data])
@@ -135,18 +135,18 @@ def fetch_klines(symbol, interval="5m"):
 def ma_volume_strategy(symbol, volume_flag=False):
     closes, volumes = fetch_klines(symbol)
 
-    ema5 = talib.EMA(closes, timeperiod=5)
-    ema10 = talib.EMA(closes, timeperiod=10)
+    ema9 = talib.EMA(closes, timeperiod=9)
+    ema26 = talib.EMA(closes, timeperiod=26)
 
     # 金叉
-    if ema5[-2] < ema10[-2] and ema5[-1] > ema10[-1]:
+    if ema9[-2] < ema26[-2] and ema9[-1] > ema26[-1]:
         if volume_flag and volumes[-1] > np.mean(volumes[-6:-1]):
             return "long"
         else:
             return "long"
 
     # 死叉
-    if ema5[-2] > ema10[-2] and ema5[-1] < ema10[-1]:
+    if ema9[-2] > ema26[-2] and ema9[-1] < ema26[-1]:
         if volume_flag and volumes[-1] > np.mean(volumes[-6:-1]):
             return "short"
         else:

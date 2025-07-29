@@ -27,7 +27,7 @@ TREND_SYMBOL_LIST = [
 
 OPEN_INTERVAL_SEC = 5 * 60  # 每5分钟执行一次
 MARGIN = 50  # 保证金
-LEVERAGE = 15
+LEVERAGE = 10
 LOSS_LIMIT = -0.02  # 亏损2%止损
 PROFIT_LIMIT = 0.07  # 盈利30%止盈
 PROFIT_DRAWBACK = 0.1  # 盈利回撤10%止盈保护
