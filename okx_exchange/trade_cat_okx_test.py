@@ -6,6 +6,7 @@ import okx.Account as Account
 from arbitrage_bot.backpack_okx_arbitrage_bot import get_okx_funding_rate, SYMBOL_MAP
 from backpack_exchange.trade_prepare import (proxy_on, load_okx_api_keys_trade_cat_okx,
                                              load_okx_api_keys_trade_cat_okx_test)
+from okx_exchange.okx_trend_trade_strategy_bot import monitor_position_macd
 
 proxy_on()  # 启用代理（如果需要）
 OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE = load_okx_api_keys_trade_cat_okx()
@@ -55,57 +56,58 @@ okx_public_api_test = PublicData.PublicAPI(OKX_API_KEY_TEST, OKX_SECRET_KEY_TEST
 #     return order_result1
 
 # 获取账户余额
-account_balance_result = okx_account_api.get_account_balance()
-print(account_balance_result)
-
-# 设置账户模式为合约 test
-position_mode_result = okx_account_api_test.set_position_mode(
-    posMode="long_short_mode",  # 开平仓模式
-)
-print(f"Position Mode Result: {position_mode_result}")
-
-# 设置SOL-USDT-SWAP合约交易参数
-leverage_result = okx_account_api_test.set_leverage(
-    instId="SOL-USDT-SWAP",  # 交易对
-    mgnMode="isolated",       # 逐仓模式
-    lever="5",                 # 杠杆倍数（根据实际需求调整）
-    posSide="short"          # 空头持仓
-)
-print(f"Leverage Result: {leverage_result}")
-
-# 下合约订单
-# order_result = okx_trade_api_test.place_order(
-#     instId="SOL-USDT-SWAP",  # 交易对
-#     tdMode="isolated",       # 逐仓模式
-#     side="sell",             # 做空
-#     ordType="market",        # 市价单
-#     sz="10",                  # 下单数量（合约张数，根据实际需求调整）
-#     posSide="short",         # 空头持仓
-#     # margin="1000"            # 保证金（单位：USDT，部分API可能不需要此参数）
+# account_balance_result = okx_account_api.get_account_balance()
+# print(account_balance_result)
+#
+# # 设置账户模式为合约 test
+# position_mode_result = okx_account_api_test.set_position_mode(
+#     posMode="long_short_mode",  # 开平仓模式
 # )
-# print(f"Order Result: {order_result}")
-# time.sleep(5)
-# 平仓订单
-# order_id = order_result['data'][0].get("ordId")
-# close_order_result = close_okx_position_by_order_id("SOL-USDT-SWAP", order_id)
-
-okx_ticker = okx_public_api_test.get_instruments(instType="SWAP", instId="SOL-USDT-SWAP")
-# 获取合约交易对的lotsz和minSz
-symbol_lotsz_minsz_map = {}
-for symbol in SYMBOL_MAP.keys():
-    ticker_info = okx_public_api_test.get_instruments(instType="SWAP", instId=symbol)
-    print(f"Ticker Info for {symbol}: {ticker_info}")
-    if ticker_info and ticker_info.get("code") == "0" and ticker_info.get("data"):
-        data = ticker_info["data"][0]
-        ctVal = data.get("ctVal")
-        lotsz = data.get("lotSz")
-        minsz = data.get("minSz")
-        symbol_lotsz_minsz_map[symbol] = {"lotsz": lotsz, "minsz": minsz, "ctVal": ctVal}
-print(f"Symbol lotsz & minsz map: {symbol_lotsz_minsz_map}")
-
-print(f"Ticker Instruments Result: {okx_ticker}")
-
-# 获取资金费率及结算时间
-funding_rate_result = get_okx_funding_rate(okx_public_api_test, "SOL-USDT-SWAP")
-
-print(f"Funding Rate Result: {funding_rate_result}")
+# print(f"Position Mode Result: {position_mode_result}")
+#
+# # 设置SOL-USDT-SWAP合约交易参数
+# leverage_result = okx_account_api_test.set_leverage(
+#     instId="SOL-USDT-SWAP",  # 交易对
+#     mgnMode="isolated",       # 逐仓模式
+#     lever="5",                 # 杠杆倍数（根据实际需求调整）
+#     posSide="short"          # 空头持仓
+# )
+# print(f"Leverage Result: {leverage_result}")
+#
+# # 下合约订单
+# # order_result = okx_trade_api_test.place_order(
+# #     instId="SOL-USDT-SWAP",  # 交易对
+# #     tdMode="isolated",       # 逐仓模式
+# #     side="sell",             # 做空
+# #     ordType="market",        # 市价单
+# #     sz="10",                  # 下单数量（合约张数，根据实际需求调整）
+# #     posSide="short",         # 空头持仓
+# #     # margin="1000"            # 保证金（单位：USDT，部分API可能不需要此参数）
+# # )
+# # print(f"Order Result: {order_result}")
+# # time.sleep(5)
+# # 平仓订单
+# # order_id = order_result['data'][0].get("ordId")
+# # close_order_result = close_okx_position_by_order_id("SOL-USDT-SWAP", order_id)
+#
+# okx_ticker = okx_public_api_test.get_instruments(instType="SWAP", instId="SOL-USDT-SWAP")
+# # 获取合约交易对的lotsz和minSz
+# symbol_lotsz_minsz_map = {}
+# for symbol in SYMBOL_MAP.keys():
+#     ticker_info = okx_public_api_test.get_instruments(instType="SWAP", instId=symbol)
+#     print(f"Ticker Info for {symbol}: {ticker_info}")
+#     if ticker_info and ticker_info.get("code") == "0" and ticker_info.get("data"):
+#         data = ticker_info["data"][0]
+#         ctVal = data.get("ctVal")
+#         lotsz = data.get("lotSz")
+#         minsz = data.get("minSz")
+#         symbol_lotsz_minsz_map[symbol] = {"lotsz": lotsz, "minsz": minsz, "ctVal": ctVal}
+# print(f"Symbol lotsz & minsz map: {symbol_lotsz_minsz_map}")
+#
+# print(f"Ticker Instruments Result: {okx_ticker}")
+#
+# # 获取资金费率及结算时间
+# funding_rate_result = get_okx_funding_rate(okx_public_api_test, "SOL-USDT-SWAP")
+#
+# print(f"Funding Rate Result: {funding_rate_result}")
+monitor_position_macd("SOL-USDT-SWAP")

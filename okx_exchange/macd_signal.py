@@ -17,7 +17,7 @@ def kline_to_dataframe(kline_data):
     df = pd.DataFrame(kline_data, columns=["timestamp", "open", "high", "low", "close", "status"])
 
     # 转换数据类型
-    # df["timestamp"] = pd.to_datetime(df["timestamp"].astype(int), unit="ms")  # 毫秒时间戳转日期
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True).dt.tz_convert("Asia/Shanghai")  # 毫秒时间戳转日期
     df[["open", "high", "low", "close"]] = df[["open", "high", "low", "close"]].astype(float)
     df["status"] = df["status"].astype(int)
 
@@ -32,6 +32,7 @@ def calc_macd(kline_data, fast=12, slow=26, signal=9, price_col='close') -> pd.D
     dea = ema(dif, signal)  # 慢线
     hist = dif - dea  # 这里用未×2 的标准化写法
     df['DIF'], df['DEA'], df['MACD_HIST'] = dif, dea, hist
+    # print(f"MACD计算完成：{len(df)}条数据，DIF:{dif} EMA, DEA:{dea} EMA, MACD:{hist} EMA")
     return df
 
 
@@ -128,9 +129,9 @@ def divergences(df: pd.DataFrame, price_col='close', pivot_win=3, use='MACD_HIST
     def last_two(vals):
         return vals[-2:] if len(vals) >= 2 else []
 
-    lp = last_two(lows_p);
+    lp = last_two(lows_p)
     lm = last_two(lows_m)
-    hp = last_two(highs_p);
+    hp = last_two(highs_p)
     hm = last_two(highs_m)
 
     # 底背离：价格新低（lp[1]处价格 < lp[0]），而指标未新低（lm[1]处指标 > lm[0]）
@@ -245,8 +246,7 @@ if __name__ == '__main__':
     short_entry = df['death_cross'] & (df['DIF'] > 0)
 
     print("macd_signals结果：")
-    print(df[['timestamp', 'close', 'DIF', 'DEA', 'MACD_HIST', 'golden_cross', 'death_cross', 'long_entry',
-              'short_entry']] if 'long_entry' in df.columns else df.head())
+    print(df)
 
     print("\n多头信号行：")
     print(df[long_entry][['timestamp', 'close', 'DIF', 'DEA', 'MACD_HIST']])

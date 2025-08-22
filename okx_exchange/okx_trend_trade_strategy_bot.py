@@ -9,6 +9,7 @@ from okx import Account, Trade, Funding, PublicData, MarketData
 from arbitrage_bot.backpack_okx_arbitrage_bot import execute_backpack_order, close_backpack_position_by_order_id
 from backpack_exchange.sol_usdc_limit_volume_bot import get_kline
 from backpack_exchange.trade_prepare import proxy_on, load_okx_api_keys_trade_cat_okx_trend
+from okx_exchange.macd_signal import macd_signals
 
 # 启用代理与加载密钥
 proxy_on()
@@ -109,8 +110,8 @@ def fetch_kline_data(kline_symbol=SYMBOL, interval="5m", limit=30):
     if not klines or "data" not in klines or len(klines["data"]) < limit:
         raise Exception(f"获取K线数据失败: {klines.get('msg', '未知错误')}")
     klines_data = klines["data"]
-    if klines_data and klines_data[0].get('confirm') == "0":
-        klines_data.pop(0)
+    # if klines_data and klines_data[0][5] == "0":
+    #     klines_data.pop(0)
     return klines_data
 
 
@@ -119,19 +120,44 @@ def monitor_position_macd(direction_symbol=SYMBOL):
     计算指定交易对的最新MACD指标，进行开仓
     策略：
     策略每5分钟执行一次，设立标志位判断是否开仓，并记录开仓信息，信息包括订单id,方向，仓位数量
-    设立MACD指标数组，长度为15用来保存最近的15个MACD指标，由新到旧排序
+    获取k线数据，调用macd_signals计算最新的MACD指标
     若没有开仓，进入开仓判断：
-    * 如果MACD指标数组为空，开始计算最近15个MACD指标，计算方法为
-    ** 调用fetch_kline_data，获取50条k线，按照长线26，短线12，信号线9计算15个MACD指标DIF,DEA,MACD保存
-    * 不为空
-    ** 调用fetch_kline_data，获取30条K线，计算最新的MACD指标DIF,DEA,MACD加入MACD指标数组
-    * 量化信号判断代码，暂时留空
+    * 进行量化方向信号判断
     * 由量化信号判断代码返回的方向进行开单，开单方法留空，保留开单信息
     若开仓，进入持仓监控：
-    * 
+    * 进行关仓方向判断
+    * 判断需要关单时，调用方法进行平仓
     :param direction_symbol:
     :return:
     """
+    position = None  # 持仓信息，格式：{'order_id':..., 'direction':..., 'qty':...}
+    while True:
+        # time.sleep(OKX_OPEN_INTERVAL_SEC)
+        klines = fetch_kline_data(kline_symbol=direction_symbol, interval="5m", limit=50)
+        macd_signal = macd_signals(klines)
+        if position is None:
+            # 未持仓，判断是否开仓
+            direction = None
+            if macd_signal == "golden_cross":
+                direction = "long"
+            elif macd_signal == "death_cross":
+                direction = "short"
+            if direction:
+                # 这里应调用开仓API，下单方法留空
+                order_id = "mock_order_id"
+                qty = MARGIN * LEVERAGE / close_prices[-1]
+                position = {'order_id': order_id, 'direction': direction, 'qty': qty}
+                print(f"开仓: 方向: {direction}, 数量: {qty}, 订单ID: {order_id}")
+        else:
+            # 已持仓，判断是否需要平仓
+            close_signal = False
+            if (position['direction'] == "long" and macd_signal == "death_cross") or \
+                    (position['direction'] == "short" and macd_signal == "golden_cross"):
+                close_signal = True
+            if close_signal:
+                print(f"平仓: 订单ID: {position['order_id']}, 方向: {position['direction']}, 数量: {position['qty']}")
+                # 这里应调用平仓API
+                position = None
 
 
 # 两根15分钟k线判断方法
@@ -159,54 +185,6 @@ def get_open_direction_15mkline(kline_symbol=SYMBOL):
         return False
 
 
-def run_strategy(run_symbol=SYMBOL):
-    in_position = False
-    backpack_order_id = None
-    backpack_qty = None
-    while True:
-        try:
-            direction = get_open_direction_15mkline(run_symbol)
-            if in_position:
-                print("已有持仓，跳过开仓")
-            else:
-                okx_ticker = okx_market_api.get_ticker(instId=run_symbol)
-                okx_price = float(
-                    okx_ticker["data"][0]["last"]) if okx_ticker and "data" in okx_ticker else None
-                if not okx_price:
-                    print(f"无法获取backpack {run_symbol}价格，跳过本轮")
-                    time.sleep(OKX_OPEN_INTERVAL_SEC)
-                    continue
-                if direction is False:
-                    print("当前无明确开仓信号，等待下一周期")
-                    time.sleep(OKX_OPEN_INTERVAL_SEC)
-                    continue
-                # 计算合约张数 todo
 
-                backpack_qty = str(round((MARGIN * LEVERAGE) / okx_price, 2))
-                backpack_result = execute_backpack_order(run_symbol, direction, backpack_qty, str(okx_price),
-                                                         OrderType.MARKET,
-                                                         leverage=LEVERAGE)
-                backpack_order_id = backpack_result.get('id')
-                in_position = True
-                monitor_position(okx_price, direction, backpack_order_id, backpack_qty, LEVERAGE, run_symbol)
-                backpack_order_id = None
-                backpack_qty = None
-                in_position = False
-        except Exception as e:
-            print(f"异常: {e}, 若有持仓进行平仓处理")
-            close_backpack_position_by_order_id(run_symbol, backpack_order_id, backpack_qty)
-            in_position = False
-        time.sleep(OKX_OPEN_INTERVAL_SEC)
+# if __name__ == "__main__":
 
-
-if __name__ == "__main__":
-    threads = []
-    for symbol in TREND_SYMBOL_LIST:
-        print(f"开始进行 {symbol} 的趋势交易策略")
-        t = threading.Thread(target=run_strategy, args=(symbol,), name=f"TrendTradeStrategy-{symbol}")
-        t.start()
-        time.sleep(random.uniform(60, 90))
-        threads.append(t)
-
-    for t in threads:
-        t.join()
