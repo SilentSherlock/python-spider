@@ -1,4 +1,3 @@
-
 import random
 import threading
 import time
@@ -98,11 +97,49 @@ def monitor_position(okx_price, direction, order_id, okx_qty, leverage=LEVERAGE,
     close_backpack_position_by_order_id(monitor_symbol, order_id, okx_qty)
 
 
+def fetch_kline_data(kline_symbol=SYMBOL, interval="5m", limit=30):
+    """
+    获取指定交易对的最新已经完结limit根K线数据，返回数据由新到旧排序，最新的K可能未结束
+    :param kline_symbol: 交易对符号
+    :param interval: K线周期
+    :param limit: 返回的K线数量
+    :return: K线数据列表
+    """
+    klines = okx_market_api.get_mark_price_candlesticks(instId=kline_symbol, bar=interval, limit=limit)
+    if not klines or "data" not in klines or len(klines["data"]) < limit:
+        raise Exception(f"获取K线数据失败: {klines.get('msg', '未知错误')}")
+    klines_data = klines["data"]
+    if klines_data and klines_data[0].get('confirm') == "0":
+        klines_data.pop(0)
+    return klines_data
+
+
+def monitor_position_macd(direction_symbol=SYMBOL):
+    """
+    计算指定交易对的最新MACD指标，进行开仓
+    策略：
+    策略每5分钟执行一次，设立标志位判断是否开仓，并记录开仓信息，信息包括订单id,方向，仓位数量
+    设立MACD指标数组，长度为15用来保存最近的15个MACD指标，由新到旧排序
+    若没有开仓，进入开仓判断：
+    * 如果MACD指标数组为空，开始计算最近15个MACD指标，计算方法为
+    ** 调用fetch_kline_data，获取50条k线，按照长线26，短线12，信号线9计算15个MACD指标DIF,DEA,MACD保存
+    * 不为空
+    ** 调用fetch_kline_data，获取30条K线，计算最新的MACD指标DIF,DEA,MACD加入MACD指标数组
+    * 量化信号判断代码，暂时留空
+    * 由量化信号判断代码返回的方向进行开单，开单方法留空，保留开单信息
+    若开仓，进入持仓监控：
+    * 
+    :param direction_symbol:
+    :return:
+    """
+
+
 # 两根15分钟k线判断方法
 def get_open_direction_15mkline(kline_symbol=SYMBOL):
     # 两根15分钟k线判断
     now = time.localtime()
-    end_time = int(time.mktime((now.tm_year, now.tm_mon, now.tm_mday, now.tm_hour, now.tm_min // 15 * 15, 0, 0, 0, -1))) * 1000
+    end_time = int(
+        time.mktime((now.tm_year, now.tm_mon, now.tm_mday, now.tm_hour, now.tm_min // 15 * 15, 0, 0, 0, -1))) * 1000
     start_time = end_time - 2 * 15 * 60 * 1000  # 转换为毫秒
     interval = "15m"
     klines = okx_market_api.get_mark_price_candlesticks(
@@ -111,8 +148,9 @@ def get_open_direction_15mkline(kline_symbol=SYMBOL):
     k1, k2 = klines[-2], klines[-1]
     up = float(k1['close']) > float(k1['open']) and float(k2['close']) > float(k2['open'])
     down = float(k1['close']) < float(k1['open']) and float(k2['close']) < float(k2['open'])
-    print(f"15分钟K线判断: symbol: {kline_symbol} k1 open:{k1['open']}, k1 close:{k1['close']}, k2 open:{k2['open']}, k2 close：{k2['close']}"
-          f", up: {up}, down: {down}")
+    print(
+        f"15分钟K线判断: symbol: {kline_symbol} k1 open:{k1['open']}, k1 close:{k1['close']}, k2 open:{k2['open']}, k2 close：{k2['close']}"
+        f", up: {up}, down: {down}")
     if up:
         return "long"
     elif down:
@@ -165,7 +203,7 @@ if __name__ == "__main__":
     threads = []
     for symbol in TREND_SYMBOL_LIST:
         print(f"开始进行 {symbol} 的趋势交易策略")
-        t = threading.Thread(target=run_strategy, args=(symbol, ), name=f"TrendTradeStrategy-{symbol}")
+        t = threading.Thread(target=run_strategy, args=(symbol,), name=f"TrendTradeStrategy-{symbol}")
         t.start()
         time.sleep(random.uniform(60, 90))
         threads.append(t)
