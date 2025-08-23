@@ -137,7 +137,7 @@ def monitor_position_macd(direction_symbol=SYMBOL):
         macd_signal = macd_signals(klines)
         mack_signal_target = macd_signal.iloc[0]
         # print(macd_signal)
-        print("当前信号" + mack_signal_target)
+        print(f"当前信号:{mack_signal_target}")
         # 低位金叉信息
         long_signal_1 = mack_signal_target["golden_cross"] and (mack_signal_target["DIF"] < 0)
         # 强势启动信号
