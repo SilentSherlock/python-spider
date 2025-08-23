@@ -110,8 +110,8 @@ def fetch_kline_data(kline_symbol=SYMBOL, interval="5m", limit=30):
     if not klines or "data" not in klines or len(klines["data"]) < limit:
         raise Exception(f"获取K线数据失败: {klines.get('msg', '未知错误')}")
     klines_data = klines["data"]
-    # if klines_data and klines_data[0][5] == "0":
-    #     klines_data.pop(0)
+    if klines_data and klines_data[0][5] == "0":
+        klines_data.pop(0)
     return klines_data
 
 
@@ -135,20 +135,22 @@ def monitor_position_macd(direction_symbol=SYMBOL):
         time.sleep(OKX_OPEN_INTERVAL_SEC)
         klines = fetch_kline_data(kline_symbol=direction_symbol, interval="5m", limit=50)
         macd_signal = macd_signals(klines)
-
+        mack_signal_target = macd_signal.iloc[0]
+        # print(macd_signal)
+        # print(mack_signal_target)
         # 低位金叉信息
-        long_signal_1 = macd_signal["golden_cross"] and (macd_signal["DIF"] < 0)
+        long_signal_1 = mack_signal_target["golden_cross"] and (mack_signal_target["DIF"] < 0)
         # 强势启动信号
-        long_signal_2 = macd_signal["zero_up"] & macd_signal["hist_expanding"] & (~macd_signal['lines_converge'])
+        long_signal_2 = mack_signal_target["zero_up"] & mack_signal_target["hist_expanding"] & (~mack_signal_target['lines_converge'])
         # 反转抄底信号
-        long_signal_3 = macd_signal["bullish_div"] & macd_signal["hist_red_to_green"]
+        long_signal_3 = mack_signal_target["bullish_div"] & mack_signal_target["hist_red_to_green"]
 
         # 高位死叉信息
-        short_signal_1 = macd_signal["death_cross"] and (macd_signal["DIF"] > 0)
+        short_signal_1 = mack_signal_target["death_cross"] and (mack_signal_target["DIF"] > 0)
         # 强势启动信号
-        short_signal_2 = macd_signal["zero_down"] & macd_signal["hist_expanding"]
+        short_signal_2 = mack_signal_target["zero_down"] & mack_signal_target["hist_expanding"]
         # 反转抄底信号
-        short_signal_3 = macd_signal["bearish_div"] & macd_signal["hist_green_to_red"]
+        short_signal_3 = mack_signal_target["bearish_div"] & mack_signal_target["hist_green_to_red"]
 
         if position is None:
             print("当前无持仓，进行开仓判断")
@@ -159,6 +161,7 @@ def monitor_position_macd(direction_symbol=SYMBOL):
                 direction = "short"
 
             if direction is None:
+                print("无开仓信号，继续等待 " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 continue
 
             ticker_price = float(klines[0][4])  # 最新k线的收盘价
