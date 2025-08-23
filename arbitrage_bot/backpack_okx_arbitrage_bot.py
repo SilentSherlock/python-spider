@@ -198,16 +198,17 @@ def calculate_funding_rate_diff():
 
 
 # 在 OKX 上执行合约下单，待优化，设置止损
-def execute_okx_order_swap(symbol, side, qty, price, order_type="market"):
+def execute_okx_order_swap(symbol, side, qty, price, order_type="market",
+                           account_api=okx_account_api, trade_api=okx_trade_api):
     if side not in ["long", "short"]:
         raise ValueError("OKX 下单方向必须是 'long' 或 'short'")
 
     # 设置账户模式为合约
-    position_mode_result = okx_account_api.set_position_mode(
+    position_mode_result = account_api.set_position_mode(
         posMode="long_short_mode",  # 开平仓模式
     )
     # 设置合约交易参数
-    leverage_result = okx_account_api.set_leverage(
+    leverage_result = account_api.set_leverage(
         instId=symbol,  # 交易对
         mgnMode="isolated",  # 逐仓模式
         lever=str(MAX_LEVERAGE),  # 杠杆倍数
@@ -217,7 +218,7 @@ def execute_okx_order_swap(symbol, side, qty, price, order_type="market"):
     if position_mode_result.get("code") != "0" or leverage_result.get("code") != "0":
         raise Exception("OKX 设置账户模式或杠杆失败")
     # 执行下单
-    order_result = okx_trade_api.place_order(
+    order_result = trade_api.place_order(
         instId=symbol,  # 交易对
         tdMode="isolated",  # 逐仓模式
         side="sell" if side == "short" else "buy",  # 做空或做多
@@ -264,7 +265,7 @@ def check_okx_order_filled(symbol, order_id, max_attempts=30, interval=1):
 
 
 # 在 OKX 上根据订单ID进行合约平仓
-def close_okx_position_by_order_id(symbol, order_id, okx_qty):
+def close_okx_position_by_order_id(symbol, order_id, okx_qty, trade_api=okx_trade_api):
     """
     根据订单ID平仓：查询订单，获取参数，反向下单
     :param okx_qty: 平仓数量，如果传入None，则使用订单中的数量
@@ -272,7 +273,7 @@ def close_okx_position_by_order_id(symbol, order_id, okx_qty):
     :param order_id: 需平仓的订单ID
     """
     # 查询订单详情
-    order_info = okx_trade_api.get_order(instId=symbol, ordId=order_id)
+    order_info = trade_api.get_order(instId=symbol, ordId=order_id)
     if not order_info or order_info.get("code") != "0":
         raise Exception(f"查询OKX订单失败: {order_info.get('msg', '未知错误')}")
     data = order_info["data"][0]
@@ -286,7 +287,7 @@ def close_okx_position_by_order_id(symbol, order_id, okx_qty):
     close_side = "buy" if side == "sell" else "sell"
     print(f"[OKX] 准备平仓: {symbol}, 方向: {close_side}, 数量: {qty}, 价格: {price}, 类型: {ord_type}")
     # 平仓下单
-    order_result = okx_trade_api.place_order(
+    order_result = trade_api.place_order(
         instId=symbol,
         tdMode="isolated",
         side=close_side,

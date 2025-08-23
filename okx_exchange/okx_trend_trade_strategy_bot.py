@@ -1,14 +1,14 @@
-import random
-import threading
+import datetime
 import time
 
 import numpy as np
 from enums.RequestEnums import OrderType
 from okx import Account, Trade, Funding, PublicData, MarketData
 
-from arbitrage_bot.backpack_okx_arbitrage_bot import execute_backpack_order, close_backpack_position_by_order_id
-from backpack_exchange.sol_usdc_limit_volume_bot import get_kline
-from backpack_exchange.trade_prepare import proxy_on, load_okx_api_keys_trade_cat_okx_trend
+from arbitrage_bot.backpack_okx_arbitrage_bot import close_backpack_position_by_order_id, \
+    SYMBOL_OKX_INSTRUMENT_MAP, calc_qty, execute_okx_order_swap, close_okx_position_by_order_id
+from backpack_exchange.trade_prepare import proxy_on, load_okx_api_keys_trade_cat_okx_trend, okx_account_api_test, \
+    okx_trade_api_test
 from okx_exchange.macd_signal import macd_signals
 
 # 启用代理与加载密钥
@@ -132,32 +132,81 @@ def monitor_position_macd(direction_symbol=SYMBOL):
     """
     position = None  # 持仓信息，格式：{'order_id':..., 'direction':..., 'qty':...}
     while True:
-        # time.sleep(OKX_OPEN_INTERVAL_SEC)
+        time.sleep(OKX_OPEN_INTERVAL_SEC)
         klines = fetch_kline_data(kline_symbol=direction_symbol, interval="5m", limit=50)
         macd_signal = macd_signals(klines)
+
+        # 低位金叉信息
+        long_signal_1 = macd_signal["golden_cross"] and (macd_signal["DIF"] < 0)
+        # 强势启动信号
+        long_signal_2 = macd_signal["zero_up"] & macd_signal["hist_expanding"] & (~macd_signal['lines_converge'])
+        # 反转抄底信号
+        long_signal_3 = macd_signal["bullish_div"] & macd_signal["hist_red_to_green"]
+
+        # 高位死叉信息
+        short_signal_1 = macd_signal["death_cross"] and (macd_signal["DIF"] > 0)
+        # 强势启动信号
+        short_signal_2 = macd_signal["zero_down"] & macd_signal["hist_expanding"]
+        # 反转抄底信号
+        short_signal_3 = macd_signal["bearish_div"] & macd_signal["hist_green_to_red"]
+
         if position is None:
-            # 未持仓，判断是否开仓
+            print("当前无持仓，进行开仓判断")
             direction = None
-            if macd_signal == "golden_cross":
+            if long_signal_2 or (long_signal_1 and long_signal_3):
                 direction = "long"
-            elif macd_signal == "death_cross":
+            elif short_signal_2 or (short_signal_1 and short_signal_3):
                 direction = "short"
-            if direction:
-                # 这里应调用开仓API，下单方法留空
-                order_id = "mock_order_id"
-                qty = MARGIN * LEVERAGE / close_prices[-1]
-                position = {'order_id': order_id, 'direction': direction, 'qty': qty}
-                print(f"开仓: 方向: {direction}, 数量: {qty}, 订单ID: {order_id}")
+
+            if direction is None:
+                continue
+
+            ticker_price = float(klines[0][4])  # 最新k线的收盘价
+            # 计算开仓数量
+            okx_ctval = float(SYMBOL_OKX_INSTRUMENT_MAP[direction_symbol]["ctVal"])  # 合约面值
+            okx_minsz = float(SYMBOL_OKX_INSTRUMENT_MAP[direction_symbol]["minsz"])  # 最小张数
+            raw_okx_qty = calc_qty(ticker_price / 2, MARGIN, LEVERAGE, okx_ctval)
+            okx_qty = int(raw_okx_qty // okx_minsz) * okx_minsz
+            okx_qty = round(okx_qty, 4)
+            # 执行开仓
+            okx_result = {}
+            for attempt in range(3):
+                try:
+                    okx_result = execute_okx_order_swap(
+                        direction_symbol, direction, okx_qty, ticker_price,
+                        order_type=OrderType.MARKET, account_api=okx_account_api_test, trade_api=okx_trade_api_test,)
+                    break
+                except Exception as okx_e:
+                    if attempt == 2:
+                        raise
+                    time.sleep(2)
+            position = {
+                "okx_symbol": direction_symbol,
+                "okx_action": "open",
+                "okx_order_id": okx_result['data'][0]['ordId'],
+                "entry_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "okx_qty": okx_qty,
+                "okx_direction": direction,
+            }
+            print(f"开仓: 订单ID: {position['order_id']}, 方向: {direction}, 数量: {okx_qty}, ")
         else:
             # 已持仓，判断是否需要平仓
-            close_signal = False
-            if (position['direction'] == "long" and macd_signal == "death_cross") or \
-                    (position['direction'] == "short" and macd_signal == "golden_cross"):
-                close_signal = True
-            if close_signal:
-                print(f"平仓: 订单ID: {position['order_id']}, 方向: {position['direction']}, 数量: {position['qty']}")
-                # 这里应调用平仓API
+            close_flag = False
+            if "long" == position.get("direction"):
+                if short_signal_2 or short_signal_1 or short_signal_3:
+                    close_flag = True
+            elif "short" == position.get("direction"):
+                if long_signal_2 or long_signal_1 or long_signal_3:
+                    close_flag = True
+            if close_flag:
+                close_okx_position_by_order_id(symbol=position["okx_symbol"],
+                                               order_id=position["okx_order_id"],
+                                               okx_qty=position["okx_qty"],
+                                               trade_api=okx_trade_api_test)
                 position = None
+                print("平仓完成，等待下一次开仓信号")
+            else:
+                print("持仓中，等待下一次平仓信号 " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
 
 # 两根15分钟k线判断方法
@@ -185,6 +234,5 @@ def get_open_direction_15mkline(kline_symbol=SYMBOL):
         return False
 
 
-
-# if __name__ == "__main__":
-
+if __name__ == "__main__":
+    monitor_position_macd(direction_symbol=SYMBOL)
