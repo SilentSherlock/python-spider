@@ -135,8 +135,10 @@ def monitor_position_macd(direction_symbol=SYMBOL):
         time.sleep(OKX_OPEN_INTERVAL_SEC)
         klines = fetch_kline_data(kline_symbol=direction_symbol, interval="5m", limit=50)
         macd_signal = macd_signals(klines)
-        mack_signal_target = macd_signal.iloc[0]
+        mack_signal_target = macd_signal.iloc[-1]
         # print(macd_signal)
+        # for m in macd_signal.iloc:
+        #     print(m)
         print(f"当前信号:{mack_signal_target}")
         # 低位金叉信息
         long_signal_1 = mack_signal_target["golden_cross"] and (mack_signal_target["DIF"] < 0)

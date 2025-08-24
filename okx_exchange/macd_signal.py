@@ -14,13 +14,15 @@ def kline_to_dataframe(kline_data):
     kline_data: [
         [timestamp, open, high, low, close, status], ...]
     """
+    # kline数据为由新到旧，进行翻转
+    kline_data.reverse()
     df = pd.DataFrame(kline_data, columns=["timestamp", "open", "high", "low", "close", "status"])
 
     # 转换数据类型
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True).dt.tz_convert("Asia/Shanghai")  # 毫秒时间戳转日期
     df[["open", "high", "low", "close"]] = df[["open", "high", "low", "close"]].astype(float)
     df["status"] = df["status"].astype(int)
-
+    # df = df.iloc[::-1].reset_index(drop=True)
     return df
 
 
@@ -30,7 +32,7 @@ def calc_macd(kline_data, fast=12, slow=26, signal=9, price_col='close') -> pd.D
     ema_slow = ema(df[price_col], slow)
     dif = ema_fast - ema_slow  # 快线
     dea = ema(dif, signal)  # 慢线
-    hist = dif - dea  # 这里用未×2 的标准化写法
+    hist = (dif - dea) * 2
     df['DIF'], df['DEA'], df['MACD_HIST'] = dif, dea, hist
     # print(f"MACD计算完成：{len(df)}条数据，DIF:{dif} EMA, DEA:{dea} EMA, MACD:{hist} EMA")
     return df
@@ -178,8 +180,7 @@ def macd_signals(kline_data, price_col='close',
                  pivot_win=3, use_for_div='MACD_HIST',
                  lookback_double=80, peak_window=6,
                  span_converge=20, tight_pct=0.15, momentum_len=4):
-    df = kline_to_dataframe(kline_data)
-    d = calc_macd(df, fast, slow, signal, price_col)
+    d = calc_macd(kline_data, fast, slow, signal, price_col)
     d = crosses(d)
     d = double_cross(d, lookback=lookback_double, peak_window=peak_window)
     d = divergences(d, price_col=price_col, pivot_win=pivot_win, use=use_for_div)
