@@ -31,7 +31,7 @@ TREND_SYMBOL_LIST = [
     "XRP-USDT-SWAP",
 ]
 
-OKX_OPEN_INTERVAL_SEC = 5 * 60  # 每5分钟执行一次
+OKX_OPEN_INTERVAL_SEC = 15 * 60  # 每15分钟执行一次
 MARGIN = 50  # 保证金
 LEVERAGE = 15
 LOSS_LIMIT = 0.2  # 亏损20%止损
