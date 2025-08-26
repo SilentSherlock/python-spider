@@ -133,7 +133,7 @@ def monitor_position_macd(direction_symbol=SYMBOL):
     position = None  # 持仓信息，格式：{'order_id':..., 'direction':..., 'qty':...}
     while True:
         time.sleep(OKX_OPEN_INTERVAL_SEC)
-        klines = fetch_kline_data(kline_symbol=direction_symbol, interval="5m", limit=50)
+        klines = fetch_kline_data(kline_symbol=direction_symbol, interval="15m", limit=50)
         macd_signal = macd_signals(klines)
         mack_signal_target = macd_signal.iloc[-1]
         # print(macd_signal)
