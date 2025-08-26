@@ -10,9 +10,12 @@ from arbitrage_bot.backpack_okx_arbitrage_bot import close_backpack_position_by_
 from backpack_exchange.trade_prepare import proxy_on, load_okx_api_keys_trade_cat_okx_trend, okx_account_api_test, \
     okx_trade_api_test
 from okx_exchange.macd_signal import macd_signals
+from utils.logging_setup import setup_logger
 
 # 启用代理与加载密钥
 proxy_on()
+logger = setup_logger(__name__)
+
 okx_live_trading = "0"
 OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE = load_okx_api_keys_trade_cat_okx_trend()
 okx_account_api = Account.AccountAPI(
@@ -21,6 +24,7 @@ okx_trade_api = Trade.TradeAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, Fals
 okx_funding_api = Funding.FundingAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, False, okx_live_trading)
 okx_public_api = PublicData.PublicAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, False, okx_live_trading)
 okx_market_api = MarketData.MarketAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, False, okx_live_trading)
+
 
 SYMBOL = "SOL-USDT-SWAP"
 TREND_SYMBOL_LIST = [
@@ -139,7 +143,7 @@ def monitor_position_macd(direction_symbol=SYMBOL):
         # print(macd_signal)
         # for m in macd_signal.iloc:
         #     print(m)
-        print(f"当前信号:{mack_signal_target}")
+        logger.info(f"当前信号:{mack_signal_target}")
         # 低位金叉信息
         long_signal_1 = mack_signal_target["golden_cross"] and (mack_signal_target["DIF"] < 0)
         # 强势启动信号
@@ -155,7 +159,7 @@ def monitor_position_macd(direction_symbol=SYMBOL):
         short_signal_3 = mack_signal_target["bearish_div"] & mack_signal_target["hist_green_to_red"]
 
         if position is None:
-            print("当前无持仓，进行开仓判断")
+            logger.info("当前无持仓，进行开仓判断")
             direction = None
             if long_signal_2 or (long_signal_1 and long_signal_3):
                 direction = "long"
@@ -163,7 +167,7 @@ def monitor_position_macd(direction_symbol=SYMBOL):
                 direction = "short"
 
             if direction is None:
-                print("无开仓信号，继续等待 " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                logger.info("无开仓信号，继续等待")
                 continue
 
             ticker_price = float(klines[0][4])  # 最新k线的收盘价
@@ -193,7 +197,7 @@ def monitor_position_macd(direction_symbol=SYMBOL):
                 "okx_qty": okx_qty,
                 "okx_direction": direction,
             }
-            print(f"开仓: 订单ID: {position['order_id']}, 方向: {direction}, 数量: {okx_qty}, ")
+            logger.info(f"开仓: 订单ID: {position['order_id']}, 方向: {direction}, 数量: {okx_qty}, ")
         else:
             # 已持仓，判断是否需要平仓
             close_flag = False
@@ -209,9 +213,9 @@ def monitor_position_macd(direction_symbol=SYMBOL):
                                                okx_qty=position["okx_qty"],
                                                trade_api=okx_trade_api_test)
                 position = None
-                print("平仓完成，等待下一次开仓信号")
+                logger.info("平仓完成，等待下一次开仓信号")
             else:
-                print("持仓中，等待下一次平仓信号 " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                logger.info("持仓中，等待下一次平仓信号 " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
 
 # 两根15分钟k线判断方法
