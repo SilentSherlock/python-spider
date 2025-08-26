@@ -136,7 +136,7 @@ def monitor_position_macd(direction_symbol=SYMBOL):
     """
     position = None  # 持仓信息，格式：{'order_id':..., 'direction':..., 'qty':...}
     while True:
-        time.sleep(OKX_OPEN_INTERVAL_SEC)
+        logger.info("开始新一轮信号计算")
         klines = fetch_kline_data(kline_symbol=direction_symbol, interval="15m", limit=50)
         macd_signal = macd_signals(klines)
         mack_signal_target = macd_signal.iloc[-1]
@@ -168,36 +168,36 @@ def monitor_position_macd(direction_symbol=SYMBOL):
 
             if direction is None:
                 logger.info("无开仓信号，继续等待")
-                continue
-
-            ticker_price = float(klines[0][4])  # 最新k线的收盘价
-            # 计算开仓数量
-            okx_ctval = float(SYMBOL_OKX_INSTRUMENT_MAP[direction_symbol]["ctVal"])  # 合约面值
-            okx_minsz = float(SYMBOL_OKX_INSTRUMENT_MAP[direction_symbol]["minsz"])  # 最小张数
-            raw_okx_qty = calc_qty(ticker_price / 2, MARGIN, LEVERAGE, okx_ctval)
-            okx_qty = int(raw_okx_qty // okx_minsz) * okx_minsz
-            okx_qty = round(okx_qty, 4)
-            # 执行开仓
-            okx_result = {}
-            for attempt in range(3):
-                try:
-                    okx_result = execute_okx_order_swap(
-                        direction_symbol, direction, okx_qty, ticker_price,
-                        order_type=OrderType.MARKET, account_api=okx_account_api_test, trade_api=okx_trade_api_test,)
-                    break
-                except Exception as okx_e:
-                    if attempt == 2:
-                        raise
-                    time.sleep(2)
-            position = {
-                "okx_symbol": direction_symbol,
-                "okx_action": "open",
-                "okx_order_id": okx_result['data'][0]['ordId'],
-                "entry_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "okx_qty": okx_qty,
-                "okx_direction": direction,
-            }
-            logger.info(f"开仓: 订单ID: {position['order_id']}, 方向: {direction}, 数量: {okx_qty}, ")
+            else:
+                ticker_price = float(klines[0][4])  # 最新k线的收盘价
+                # 计算开仓数量
+                okx_ctval = float(SYMBOL_OKX_INSTRUMENT_MAP[direction_symbol]["ctVal"])  # 合约面值
+                okx_minsz = float(SYMBOL_OKX_INSTRUMENT_MAP[direction_symbol]["minsz"])  # 最小张数
+                raw_okx_qty = calc_qty(ticker_price / 2, MARGIN, LEVERAGE, okx_ctval)
+                okx_qty = int(raw_okx_qty // okx_minsz) * okx_minsz
+                okx_qty = round(okx_qty, 4)
+                # 执行开仓
+                okx_result = {}
+                for attempt in range(3):
+                    try:
+                        okx_result = execute_okx_order_swap(
+                            direction_symbol, direction, okx_qty, ticker_price,
+                            order_type=OrderType.MARKET, account_api=okx_account_api_test,
+                            trade_api=okx_trade_api_test, )
+                        break
+                    except Exception as okx_e:
+                        if attempt == 2:
+                            raise
+                        time.sleep(2)
+                position = {
+                    "okx_symbol": direction_symbol,
+                    "okx_action": "open",
+                    "okx_order_id": okx_result['data'][0]['ordId'],
+                    "entry_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "okx_qty": okx_qty,
+                    "okx_direction": direction,
+                }
+                logger.info(f"开仓: 订单ID: {position['order_id']}, 方向: {direction}, 数量: {okx_qty}, ")
         else:
             # 已持仓，判断是否需要平仓
             close_flag = False
@@ -216,6 +216,8 @@ def monitor_position_macd(direction_symbol=SYMBOL):
                 logger.info("平仓完成，等待下一次开仓信号")
             else:
                 logger.info("持仓中，等待下一次平仓信号 " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+        time.sleep(OKX_OPEN_INTERVAL_SEC)
 
 
 # 两根15分钟k线判断方法

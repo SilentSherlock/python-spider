@@ -51,8 +51,8 @@ def crosses(df: pd.DataFrame) -> pd.DataFrame:
     d['death_cross'] = (prev_dif > prev_dea) & (d['DIF'] < d['DEA'])
 
     # 0轴突破（用 DIF 判定，也可用 MACD_HIST）
-    d['zero_up'] = (prev_dif <= 0) & (d['DIF'] > 0)
-    d['zero_down'] = (prev_dif >= 0) & (d['DIF'] < 0)
+    d['zero_up'] = (prev_hist <= 0) & (d['MACD_HIST'] > 0)
+    d['zero_down'] = (prev_hist >= 0) & (d['MACD_HIST'] < 0)
 
     # 柱状图颜色切换（绿->红 / 红->绿）
     d['hist_red_to_green'] = (prev_hist <= 0) & (d['MACD_HIST'] > 0)
