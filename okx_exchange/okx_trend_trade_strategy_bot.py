@@ -134,6 +134,15 @@ def monitor_position_macd(direction_symbol=SYMBOL):
     :return:
     """
     position = None  # 持仓信息，格式：{'order_id':..., 'direction':..., 'qty':...}
+    # 整15启动，以便获取完结的K线，同时尽可能避免数据损失
+    # 延迟到最近的整15分钟再启动
+    now = datetime.datetime.now()
+    delay_minutes = (15 - now.minute % 15) % 15
+    delay_seconds = (delay_minutes * 60 - now.second) + 40 # 多等40秒，确保K线完结
+    if delay_seconds > 0:
+        logger.info(f"延迟 {delay_seconds} 秒，等待到最近的整15分钟再启动")
+        time.sleep(delay_seconds)
+
     while True:
         logger.info("开始新一轮信号计算")
         klines = fetch_kline_data(kline_symbol=direction_symbol, interval="15m", limit=50)
