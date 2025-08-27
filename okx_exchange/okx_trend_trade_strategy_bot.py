@@ -25,7 +25,6 @@ okx_funding_api = Funding.FundingAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE
 okx_public_api = PublicData.PublicAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, False, okx_live_trading)
 okx_market_api = MarketData.MarketAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, False, okx_live_trading)
 
-
 SYMBOL = "SOL-USDT-SWAP"
 TREND_SYMBOL_LIST = [
     "BTC-USDT-SWAP",
@@ -140,7 +139,6 @@ def monitor_position_macd(direction_symbol=SYMBOL):
         klines = fetch_kline_data(kline_symbol=direction_symbol, interval="15m", limit=50)
         macd_signal = macd_signals(klines)
 
-
         macd_signal_target = {}
         for key in macd_signal.iloc[-1].keys():
             v1 = macd_signal.iloc[-1][key]
@@ -158,14 +156,14 @@ def monitor_position_macd(direction_symbol=SYMBOL):
         # 低位金叉信息
         long_signal_1 = macd_signal_target["golden_cross"] and (macd_signal_target["DIF"] < 0)
         # 强势启动信号
-        long_signal_2 = macd_signal_target["zero_up"] and macd_signal_target["hist_expanding"] and (not macd_signal_target['lines_converge'])
+        long_signal_2 = macd_signal_target["zero_up"] and macd_signal_target["hist_expanding"] and (
+            not macd_signal_target['lines_converge'])
         # 反转抄底信号
         long_signal_3 = macd_signal_target["bullish_div"] and macd_signal_target["hist_red_to_green"]
         # 低位金叉+反转
         long_signal_4 = long_signal_1 and macd_signal_target["hist_red_to_green"]
         # ema金叉+低位金叉
         long_signal_5 = macd_signal_target["ema_golden_cross"] and long_signal_1
-
 
         # 高位死叉信息
         short_signal_1 = macd_signal_target["death_cross"] and (macd_signal_target["DIF"] > 0)
@@ -177,7 +175,6 @@ def monitor_position_macd(direction_symbol=SYMBOL):
         short_signal_4 = short_signal_1 and macd_signal_target["hist_green_to_red"]
         # 高位死叉+ema死叉
         short_signal_5 = macd_signal_target["ema_death_cross"] and short_signal_1
-
 
         if position is None:
             logger.info("当前无持仓，进行开仓判断")
@@ -223,10 +220,10 @@ def monitor_position_macd(direction_symbol=SYMBOL):
             # 已持仓，判断是否需要平仓
             close_flag = False
             if "long" == position.get("direction"):
-                if short_signal_2 or short_signal_1 or short_signal_3:
+                if short_signal_2 or short_signal_1 or short_signal_3 or short_signal_4 or short_signal_5:
                     close_flag = True
             elif "short" == position.get("direction"):
-                if long_signal_2 or long_signal_1 or long_signal_3:
+                if long_signal_2 or long_signal_1 or long_signal_3 or long_signal_4 or long_signal_5:
                     close_flag = True
             if close_flag:
                 close_okx_position_by_order_id(symbol=position["okx_symbol"],
