@@ -138,7 +138,7 @@ def monitor_position_macd(direction_symbol=SYMBOL):
     # 延迟到最近的整15分钟再启动
     now = datetime.datetime.now()
     delay_minutes = (15 - now.minute % 15) % 15
-    delay_seconds = (delay_minutes * 60 - now.second) + 40 # 多等40秒，确保K线完结
+    delay_seconds = (delay_minutes * 60 - now.second) + 40  # 多等40秒，确保K线完结
     if delay_seconds > 0:
         logger.info(f"延迟 {delay_seconds} 秒，等待到最近的整15分钟再启动")
         time.sleep(delay_seconds)
