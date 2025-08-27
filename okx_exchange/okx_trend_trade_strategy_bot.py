@@ -179,6 +179,7 @@ def monitor_position_macd(direction_symbol=SYMBOL):
         if position is None:
             logger.info("当前无持仓，进行开仓判断")
             direction = None
+            # direction = "short"
             if long_signal_2 or (long_signal_1 and long_signal_3) or long_signal_4 or long_signal_5:
                 direction = "long"
             elif short_signal_2 or (short_signal_1 and short_signal_3) or short_signal_4 or short_signal_5:
@@ -187,6 +188,7 @@ def monitor_position_macd(direction_symbol=SYMBOL):
             if direction is None:
                 logger.info("无开仓信号，继续等待")
             else:
+                logger.info("开仓信号出现，准备开仓，方向: " + direction)
                 ticker_price = float(klines[0][4])  # 最新k线的收盘价
                 # 计算开仓数量
                 okx_ctval = float(SYMBOL_OKX_INSTRUMENT_MAP[direction_symbol]["ctVal"])  # 合约面值
@@ -200,7 +202,7 @@ def monitor_position_macd(direction_symbol=SYMBOL):
                     try:
                         okx_result = execute_okx_order_swap(
                             direction_symbol, direction, okx_qty, ticker_price,
-                            order_type=OrderType.MARKET, account_api=okx_account_api_test,
+                            order_type="market", account_api=okx_account_api_test,
                             trade_api=okx_trade_api_test, )
                         break
                     except Exception as okx_e:
@@ -215,10 +217,11 @@ def monitor_position_macd(direction_symbol=SYMBOL):
                     "okx_qty": okx_qty,
                     "okx_direction": direction,
                 }
-                logger.info(f"开仓: 订单ID: {position['order_id']}, 方向: {direction}, 数量: {okx_qty}, ")
+                logger.info(f"开仓: 订单ID: {position['okx_order_id']}, 方向: {direction}, 数量: {okx_qty}, ")
         else:
             # 已持仓，判断是否需要平仓
             close_flag = False
+            # close_flag = True
             if "long" == position.get("direction"):
                 if short_signal_2 or short_signal_1 or short_signal_3 or short_signal_4 or short_signal_5:
                     close_flag = True
