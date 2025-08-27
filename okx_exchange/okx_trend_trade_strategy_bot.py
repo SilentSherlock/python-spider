@@ -139,31 +139,52 @@ def monitor_position_macd(direction_symbol=SYMBOL):
         logger.info("开始新一轮信号计算")
         klines = fetch_kline_data(kline_symbol=direction_symbol, interval="15m", limit=50)
         macd_signal = macd_signals(klines)
-        mack_signal_target = macd_signal.iloc[-1]
+
+
+        macd_signal_target = {}
+        for key in macd_signal.iloc[-1].keys():
+            v1 = macd_signal.iloc[-1][key]
+            v2 = macd_signal.iloc[-2][key]
+            v3 = macd_signal.iloc[-3][key]
+            if isinstance(v1, bool) and isinstance(v2, bool) and isinstance(v3, bool):
+                macd_signal_target[key] = v1 ^ v2 ^ v3
+            else:
+                macd_signal_target[key] = v1
+        # mack_signal_target = macd_signal.iloc[-1] ^ macd_signal.iloc[-2] ^ macd_signal.iloc[-3]  # 取最新三根k线的信号异或
         # print(macd_signal)
         # for m in macd_signal.iloc:
         #     print(m)
-        logger.info(f"当前信号:{mack_signal_target}")
+        logger.info(f"当前信号:{macd_signal_target}")
         # 低位金叉信息
-        long_signal_1 = mack_signal_target["golden_cross"] and (mack_signal_target["DIF"] < 0)
+        long_signal_1 = macd_signal_target["golden_cross"] and (macd_signal_target["DIF"] < 0)
         # 强势启动信号
-        long_signal_2 = mack_signal_target["zero_up"] & mack_signal_target["hist_expanding"] & (~mack_signal_target['lines_converge'])
+        long_signal_2 = macd_signal_target["zero_up"] and macd_signal_target["hist_expanding"] and (not macd_signal_target['lines_converge'])
         # 反转抄底信号
-        long_signal_3 = mack_signal_target["bullish_div"] & mack_signal_target["hist_red_to_green"]
+        long_signal_3 = macd_signal_target["bullish_div"] and macd_signal_target["hist_red_to_green"]
+        # 低位金叉+反转
+        long_signal_4 = long_signal_1 and macd_signal_target["hist_red_to_green"]
+        # ema金叉+低位金叉
+        long_signal_5 = macd_signal_target["ema_golden_cross"] and long_signal_1
+
 
         # 高位死叉信息
-        short_signal_1 = mack_signal_target["death_cross"] and (mack_signal_target["DIF"] > 0)
+        short_signal_1 = macd_signal_target["death_cross"] and (macd_signal_target["DIF"] > 0)
         # 强势启动信号
-        short_signal_2 = mack_signal_target["zero_down"] & mack_signal_target["hist_expanding"]
+        short_signal_2 = macd_signal_target["zero_down"] and macd_signal_target["hist_expanding"]
         # 反转抄底信号
-        short_signal_3 = mack_signal_target["bearish_div"] & mack_signal_target["hist_green_to_red"]
+        short_signal_3 = macd_signal_target["bearish_div"] and macd_signal_target["hist_green_to_red"]
+        # 高位死叉+反转
+        short_signal_4 = short_signal_1 and macd_signal_target["hist_green_to_red"]
+        # 高位死叉+ema死叉
+        short_signal_5 = macd_signal_target["ema_death_cross"] and short_signal_1
+
 
         if position is None:
             logger.info("当前无持仓，进行开仓判断")
             direction = None
-            if long_signal_2 or (long_signal_1 and long_signal_3):
+            if long_signal_2 or (long_signal_1 and long_signal_3) or long_signal_4 or long_signal_5:
                 direction = "long"
-            elif short_signal_2 or (short_signal_1 and short_signal_3):
+            elif short_signal_2 or (short_signal_1 and short_signal_3) or short_signal_4 or short_signal_5:
                 direction = "short"
 
             if direction is None:

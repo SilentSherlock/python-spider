@@ -171,6 +171,19 @@ def consolidation_and_momentum(df: pd.DataFrame, span=20, tight_pct=0.15, moment
     d['hist_contracting'] = dec.rolling(momentum_len).sum() == momentum_len  # 连续缩短
     return d
 
+# 计算ema交叉
+def ema_cross(df: pd.DataFrame, price_col='close', fast=5, slow=10) -> pd.DataFrame:
+    """
+    判断EMA5和EMA10是否交叉，生成'ema_golden_cross'和'ema_death_cross'信号
+    """
+    d = df.copy()
+    d['EMA_FAST'] = ema(d[price_col], fast)
+    d['EMA_SLOW'] = ema(d[price_col], slow)
+    prev_fast = d['EMA_FAST'].shift(1)
+    prev_slow = d['EMA_SLOW'].shift(1)
+    d['ema_golden_cross'] = (prev_fast < prev_slow) & (d['EMA_FAST'] > d['EMA_SLOW'])
+    d['ema_death_cross'] = (prev_fast > prev_slow) & (d['EMA_FAST'] < d['EMA_SLOW'])
+    return d
 
 # -----------------------------
 # 6) 一键生成所有信号
@@ -179,10 +192,11 @@ def macd_signals(kline_data, price_col='close',
                  fast=12, slow=26, signal=9,
                  pivot_win=3, use_for_div='MACD_HIST',
                  lookback_double=80, peak_window=6,
-                 span_converge=20, tight_pct=0.15, momentum_len=4):
+                 span_converge=20, tight_pct=0.15, momentum_len=3):
     d = calc_macd(kline_data, fast, slow, signal, price_col)
     d = crosses(d)
     d = double_cross(d, lookback=lookback_double, peak_window=peak_window)
+    d = ema_cross(d)
     d = divergences(d, price_col=price_col, pivot_win=pivot_win, use=use_for_div)
     d = consolidation_and_momentum(d, span=span_converge, tight_pct=tight_pct, momentum_len=momentum_len)
     return d
