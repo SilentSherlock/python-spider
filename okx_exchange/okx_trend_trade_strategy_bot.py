@@ -232,10 +232,12 @@ def monitor_position_macd(direction_symbol=SYMBOL):
             close_flag = False
             # close_flag = True
             if "long" == position.get("direction"):
-                if short_signal_2 or short_signal_1 or short_signal_3 or short_signal_4 or short_signal_5:
+                if (short_signal_2 or short_signal_1 or short_signal_3 or short_signal_4 or short_signal_5
+                        or macd_signal_target["zero_down"]) or macd_signal_target["death_cross"]:
                     close_flag = True
             elif "short" == position.get("direction"):
-                if long_signal_2 or long_signal_1 or long_signal_3 or long_signal_4 or long_signal_5:
+                if long_signal_2 or long_signal_1 or long_signal_3 or long_signal_4 or long_signal_5\
+                        or macd_signal_target["zero_up"] or macd_signal_target["golden_cross"]:
                     close_flag = True
             if close_flag:
                 close_okx_position_by_order_id(symbol=position["okx_symbol"],
