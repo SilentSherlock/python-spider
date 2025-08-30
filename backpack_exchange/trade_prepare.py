@@ -101,3 +101,5 @@ okx_account_api_test = Account.AccountAPI(OKX_API_KEY_TEST, OKX_SECRET_KEY_TEST,
 okx_trade_api_test = Trade.TradeAPI(OKX_API_KEY_TEST, OKX_SECRET_KEY_TEST, OKX_PASSPHRASE_TEST, False, okx_test_trading)
 okx_public_api_test = PublicData.PublicAPI(OKX_API_KEY_TEST, OKX_SECRET_KEY_TEST, OKX_PASSPHRASE_TEST, False,
                                            okx_test_trading)
+okx_market_api_test = MarketData.MarketAPI(OKX_API_KEY_TEST, OKX_SECRET_KEY_TEST, OKX_PASSPHRASE_TEST, False,
+                                           okx_test_trading)

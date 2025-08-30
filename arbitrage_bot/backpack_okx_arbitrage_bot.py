@@ -10,6 +10,7 @@ from okx import Account, Trade, Funding, MarketData, PublicData
 
 from backpack_exchange.trade_prepare import (proxy_on, load_okx_api_keys_trade_cat_okx,
                                              load_backpack_api_keys_trade_cat_funding)
+from utils.logging_setup import setup_logger
 
 # === 初始化设置 ===
 proxy_on()  # 启用代理（如果需要）
@@ -58,6 +59,7 @@ THRESHOLD_DIFF_Y = 0.07  # 资金费率差套利阈值年化（10%）
 MAX_ORDER_USD = 1000  # 每次套利的最大 USD 头寸
 MAX_LEVERAGE = 10  # 最大杠杆倍数
 SETTLEMENT_WINDOW_MIN = 30  # 资金费率结算前几分钟内允许操作
+logger = setup_logger(__name__)
 
 
 # === 工具函数 ===
@@ -107,7 +109,7 @@ def get_okx_funding_rate(public_api, symbol):
     # 转换为本地时间进行可读性输出
     funding_time_read = datetime.fromtimestamp(int(funding_time) / 1000)
     next_funding_time_read = datetime.fromtimestamp(int(next_funding_time) / 1000)
-    print(
+    logger.info(
         f"okx symbol {symbol} 资金费率: {rate:.4%}, 结算时间: {funding_time_read}, 下次结算时间: {next_funding_time_read}")
 
     return rate, funding_time, next_funding_time
@@ -125,7 +127,7 @@ def get_backpack_funding_rate(public, symbol):
     interval_end_timestamp = parser.parse(data["intervalEndTimestamp"])  # backpack返回的是上次结算后的本地时间2025-07-08T16:00:00
     funding_time = interval_end_timestamp + timedelta(hours=8)  # Backpack 的资金费率是每8小时结算一次
 
-    print(f"Backpack symbol {symbol} 资金费率: {rate:.4%}, 结算时间: {funding_time}")
+    logger.info(f"Backpack symbol {symbol} 资金费率: {rate:.4%}, 结算时间: {funding_time}")
     funding_time_unix = int(funding_time.timestamp() * 1000)  # 转换为毫秒时间戳
 
     return rate, funding_time_unix
@@ -135,7 +137,7 @@ def get_backpack_funding_rate(public, symbol):
 def within_funding_window(next_funding_time, window_minutes):
     now = datetime.now()
     result = 0 <= int((next_funding_time - now).total_seconds()) <= window_minutes * 60
-    print(f"当前时间在交易窗口内: {result}, 下次结算时间: {next_funding_time}, 当前时间: {now}")
+    logger.info(f"当前时间在交易窗口内: {result}, 下次结算时间: {next_funding_time}, 当前时间: {now}")
     return result
 
 
@@ -166,12 +168,12 @@ def calculate_funding_rate_diff():
                 okx_action, backpack_action = ("hold", "hold")
             # 若资金费率结算时间不一致，无套利空间
             if int(okx_funding_time) != int(backpack_funding_time):
-                print(f"资金费率结算时间不一致: OKX={okx_funding_time}, Backpack={backpack_funding_time}")
+                logger.info(f"资金费率结算时间不一致: OKX={okx_funding_time}, Backpack={backpack_funding_time}")
                 okx_action, backpack_action = ("hold", "hold")
 
             # 没有合约参数信息，无套利空间 待定可修改，主要是hype和fartcoin的合约参数不确定
             if okx_symbol not in SYMBOL_OKX_INSTRUMENT_MAP.keys():
-                print(f"合约参数信息缺失: {okx_symbol} 无法进行套利")
+                logger.info(f"合约参数信息缺失: {okx_symbol} 无法进行套利")
                 okx_action, backpack_action = ("hold", "hold")
 
             results.append({
@@ -186,11 +188,11 @@ def calculate_funding_rate_diff():
                 "backpack_action": backpack_action
             })
         except Exception as e:
-            print(f"获取{okx_symbol}资金费率失败: {e}")
+            logger.info(f"获取{okx_symbol}资金费率失败: {e}")
     # 按年化收益降序排序
     results.sort(key=lambda x: x["annualized"], reverse=True)
     for r in results:
-        print(
+        logger.info(
             f"{r['okx_symbol']} <-> {r['backpack_symbol']}: 差值={r['diff']:.4%}, 年化={r['annualized']:.4%}, "
             f"OKX={r['okx_rate']:.4%}, Backpack={r['backpack_rate']:.4%}"f", OKX操作={r['okx_action']}, "
             f"Backpack操作={r['backpack_action']}, 下次结算时间={r['next_funding_time']}")
@@ -214,9 +216,10 @@ def execute_okx_order_swap(symbol, side, qty, price, order_type="market",
         lever=str(MAX_LEVERAGE),  # 杠杆倍数
         posSide=side
     )
-    print(f"[OKX] 设置账户模式和杠杆: {position_mode_result}, {leverage_result}")
+    logger.info(f"[OKX] 设置账户模式和杠杆: {position_mode_result}, {leverage_result}")
     if position_mode_result.get("code") != "0" or leverage_result.get("code") != "0":
-        raise Exception("OKX 设置账户模式或杠杆失败")
+        logger.info(f"OKX 设置账户模式或杠杆失败: {position_mode_result}, {leverage_result}, 已设置过，直接开仓")
+        # raise Exception("OKX 设置账户模式或杠杆失败")
     # 执行下单
     order_result = trade_api.place_order(
         instId=symbol,  # 交易对
@@ -227,7 +230,7 @@ def execute_okx_order_swap(symbol, side, qty, price, order_type="market",
         px=price,
         posSide=side,  # 持仓方向
     )
-    print(f"[OKX] 下单结果: {order_result}")
+    logger.info(f"[OKX] 下单结果: {order_result}")
     if order_result.get("code") != "0":
         raise Exception(f"OKX 下单失败: {order_result.get('msg')}")
     return order_result
@@ -246,21 +249,21 @@ def check_okx_order_filled(symbol, order_id, max_attempts=30, interval=1):
     for attempt in range(max_attempts):
         order_info = okx_trade_api.get_order(instId=symbol, ordId=order_id)
         if not order_info or order_info.get("code") != "0":
-            print(f"查询OKX订单失败: {order_info.get('msg', '未知错误')}")
+            logger.info(f"查询OKX订单失败: {order_info.get('msg', '未知错误')}")
             break
         data = order_info["data"][0]
         state = data.get("state")
         if state == "filled":
-            print(f"订单已成交: {order_id}")
+            logger.info(f"订单已成交: {order_id}")
             return True
         elif state in ("canceled", "cancelled"):
-            print(f"订单已取消: {order_id}")
+            logger.info(f"订单已取消: {order_id}")
             return False
         time.sleep(interval)
     # 超时未成交，取消订单
-    print(f"订单{order_id}未成交，准备取消")
+    logger.info(f"订单{order_id}未成交，准备取消")
     cancel_result = okx_trade_api.cancel_order(instId=symbol, ordId=order_id)
-    print(f"取消订单结果: {cancel_result}")
+    logger.info(f"取消订单结果: {cancel_result}")
     return False
 
 
@@ -285,7 +288,7 @@ def close_okx_position_by_order_id(symbol, order_id, okx_qty, trade_api=okx_trad
     ord_type = "market"  # 默认使用市价单平仓
     # 反向方向
     close_side = "buy" if side == "sell" else "sell"
-    print(f"[OKX] 准备平仓: {symbol}, 方向: {close_side}, 数量: {qty}, 价格: {price}, 类型: {ord_type}")
+    logger.info(f"[OKX] 准备平仓: {symbol}, 方向: {close_side}, 数量: {qty}, 价格: {price}, 类型: {ord_type}")
     # 平仓下单
     order_result = trade_api.place_order(
         instId=symbol,
@@ -297,7 +300,7 @@ def close_okx_position_by_order_id(symbol, order_id, okx_qty, trade_api=okx_trad
         posSide=pos_side,
         reduceOnly=True
     )
-    print(f"[OKX] 平仓结果: {order_result}")
+    logger.info(f"[OKX] 平仓结果: {order_result}")
     if order_result.get("code") != "0":
         raise Exception(f"OKX 平仓失败: {order_result.get('msg', '未知错误')}")
     return order_result
@@ -326,9 +329,9 @@ def execute_backpack_order(symbol, side, qty, price, order_type=OrderType.MARKET
             price=price
         )
     except requests.exceptions.RequestException as e:
-        print(f"[异常] Backpack 下单请求失败: {e}")
+        logger.info(f"[异常] Backpack 下单请求失败: {e}")
         raise e
-    print(f"[Backpack] 下单结果: {order_result}")
+    logger.info(f"[Backpack] 下单结果: {order_result}")
     if not order_result or "Error" in order_result:
         raise Exception(f"Backpack 下单失败: {order_result.get('error', '未知错误')}")
     return order_result
@@ -347,13 +350,13 @@ def check_backpack_order_filled(symbol, order_id, max_attempts=30, interval=1):
     for attempt in range(max_attempts):
         fill_order = backpack_client.get_fill_history(symbol=symbol, orderId=order_id)
         if not fill_order or "error" in fill_order:
-            print(f"查询Backpack订单失败: {fill_order.get('error', '未知错误') if fill_order else '无返回'}")
+            logger.info(f"查询Backpack订单失败: {fill_order.get('error', '未知错误') if fill_order else '无返回'}")
             break
         if fill_order and len(fill_order) > 0:
-            print(f"订单已成交: {order_id}")
+            logger.info(f"订单已成交: {order_id}")
             return True
         time.sleep(interval)
-    print(f"订单{order_id}未成交，准备取消")
+    logger.info(f"订单{order_id}未成交，准备取消")
     backpack_client.cancel_open_order(symbol=symbol, orderId=order_id)
     return False
 
@@ -371,7 +374,7 @@ def close_backpack_position_by_order_id(symbol, order_id, backpack_qty=None):
     if not order_infos or "error" in order_infos:
         raise Exception(f"查询订单失败: {order_infos.get('error', '未知错误')}")
     order_info = order_infos[0]
-    print(f"[Backpack] 查询到订单信息: {order_info}")
+    logger.info(f"[Backpack] 查询到订单信息: {order_info}")
     symbol = order_info["symbol"]
     side = order_info["side"]
     qty = order_info["quantity"] if backpack_qty is None else backpack_qty  # 如果传入了数量，则使用传入的数量，否则使用订单中的数量
@@ -381,7 +384,7 @@ def close_backpack_position_by_order_id(symbol, order_id, backpack_qty=None):
     # 反向方向
     close_side = "short" if side == "Bid" else "long"
     # 平仓下单
-    print(f"[Backpack] 准备平仓: {symbol}, 方向: {close_side}, 数量: {qty}, 价格: {price}, 类型: {order_type}")
+    logger.info(f"[Backpack] 准备平仓: {symbol}, 方向: {close_side}, 数量: {qty}, 价格: {price}, 类型: {order_type}")
     order_result = backpack_client.execute_order(
         orderType=order_type,
         side=OrderSide.ASK if close_side == "short" else OrderSide.BID,
@@ -392,7 +395,7 @@ def close_backpack_position_by_order_id(symbol, order_id, backpack_qty=None):
         price=price,
         reduceOnly=True  # 确保是平仓操作
     )
-    print(f"[Backpack] 平仓结果: {order_result}")
+    logger.info(f"[Backpack] 平仓结果: {order_result}")
     if not order_result or "Error" in order_result:
         raise Exception(f"Backpack 平仓失败: {order_result.get('error', '未知错误')}")
     return order_result
@@ -405,7 +408,7 @@ def arbitrage_loop():
 
     while True:
         try:
-            print("\n==== 开始资金费率套利程序 ====")
+            logger.info("\n==== 开始资金费率套利程序 ====")
             now = datetime.now()
 
             if not is_open:
@@ -420,7 +423,7 @@ def arbitrage_loop():
                                                       SETTLEMENT_WINDOW_MIN)
                     ):
                         # 执行开仓前准备工作
-                        print("\n>> 开始执行开仓前准备...")
+                        logger.info("\n>> 开始执行开仓前准备...")
                         # 获取当前标的最新价格
                         okx_ticker = okx_market_api.get_ticker(instId=r["okx_symbol"])
                         okx_price = float(
@@ -429,7 +432,7 @@ def arbitrage_loop():
                         backpack_price = float(backpack_ticker[
                                                    "lastPrice"]) if backpack_ticker and "lastPrice" in backpack_ticker \
                             else None
-                        print(f"OKX最新价: {okx_price}, Backpack最新价: {backpack_price}")
+                        logger.info(f"OKX最新价: {okx_price}, Backpack最新价: {backpack_price}")
                         price = (okx_price + backpack_price) / 2 if okx_price and backpack_price else None
 
                         # 计算okx合约张数（先用calc_qty计算，再向下取整为最小张数的整数倍）
@@ -440,9 +443,9 @@ def arbitrage_loop():
                         okx_qty = round(okx_qty, 4)
                         # 根据okx_qty反推backpack_qty（币本位：张数 * 合约面值）
                         backpack_qty = round(okx_qty * okx_ctval, 4)
-                        print(f"计划开仓数量okx: {okx_qty}, 价格: {price}, backpack: {backpack_qty}")
+                        logger.info(f"计划开仓数量okx: {okx_qty}, 价格: {price}, backpack: {backpack_qty}")
                         if not price or okx_qty <= 0 or backpack_qty <= 0:
-                            print(
+                            logger.info(
                                 f"[异常] 计算开仓数量或价格失败: okx_qty={okx_qty}, backpack_qty={backpack_qty}, price={price}")
                             continue
 
@@ -460,7 +463,7 @@ def arbitrage_loop():
                                                                         price)
                                     break
                                 except Exception as okx_e:
-                                    print(f"[异常] OKX下单失败, 第{okx_attempt + 1}次重试: {okx_e}")
+                                    logger.info(f"[异常] OKX下单失败, 第{okx_attempt + 1}次重试: {okx_e}")
                                     if okx_attempt == 2:
                                         raise
                                     time.sleep(2)
@@ -475,12 +478,12 @@ def arbitrage_loop():
                                                                                  price)
                                     break
                                 except Exception as bp_e:
-                                    print(f"[异常] Backpack下单失败, 第{bp_attempt + 1}次重试: {bp_e}")
+                                    logger.info(f"[异常] Backpack下单失败, 第{bp_attempt + 1}次重试: {bp_e}")
                                     if bp_attempt == 2:
                                         raise
                                     time.sleep(2)
                         except Exception as e:
-                            print(f"[异常] 执行开仓失败: {e}, 正在取消OKX和Backpack所有当前标的开单并重试...")
+                            logger.info(f"[异常] 执行开仓失败: {e}, 正在取消OKX和Backpack所有当前标的开单并重试...")
                             # 取消OKX当前标的所有开单，先关仓流动性好的，避免损失
                             try:
                                 open_orders = okx_trade_api.get_order_list(instId=r["okx_symbol"])
@@ -488,7 +491,7 @@ def arbitrage_loop():
                                     for order in open_orders["data"]:
                                         okx_trade_api.cancel_order(instId=r["okx_symbol"], ordId=order["ordId"])
                             except Exception as cancel_okx_e:
-                                print(f"[异常] 取消OKX开单失败: {cancel_okx_e}")
+                                logger.info(f"[异常] 取消OKX开单失败: {cancel_okx_e}")
                             # 取消Backpack当前标的所有开单
                             try:
                                 open_orders = backpack_client.get_users_open_orders(symbol=r["backpack_symbol"])
@@ -497,7 +500,7 @@ def arbitrage_loop():
                                         backpack_client.cancel_open_order(symbol=r["backpack_symbol"],
                                                                           orderId=order["id"])
                             except Exception as cancel_bp_e:
-                                print(f"[异常] 取消Backpack开单失败: {cancel_bp_e}")
+                                logger.info(f"[异常] 取消Backpack开单失败: {cancel_bp_e}")
                             # 重试开仓
                             okx_result = execute_okx_order_swap(r["okx_symbol"], r["okx_action"], okx_qty, price)
                             backpack_result = execute_backpack_order(r["backpack_symbol"], r["backpack_action"],
@@ -526,10 +529,10 @@ def arbitrage_loop():
                             "backpack_qty": backpack_qty,
                         }
                         is_open = True
-                        print(f"\n>> 开仓成功: open_info={open_info}")
+                        logger.info(f"\n>> 开仓成功: open_info={open_info}")
                         break  # 只执行一组
                     else:
-                        print(f"results annualized: {r['annualized']:.4%}  {THRESHOLD_DIFF_Y:.4%}, "
+                        logger.info(f"results annualized: {r['annualized']:.4%}  {THRESHOLD_DIFF_Y:.4%}, "
                               f"okx_action: {r['okx_action']}, "
                               f"backpack_action: {r['backpack_action']}, "
                               f"next_funding_time: {datetime.fromtimestamp(int(r['next_funding_time']) / 1000)},"
@@ -538,10 +541,10 @@ def arbitrage_loop():
             else:
                 # 已开仓，进行监控
                 now_ts = int(datetime.now().timestamp() * 1000)
-                print(f"当前时间: {datetime.now()}, 关仓时间: {datetime.fromtimestamp(int(open_info['close_time']) / 1000)}")
+                logger.info(f"当前时间: {datetime.now()}, 关仓时间: {datetime.fromtimestamp(int(open_info['close_time']) / 1000)}")
 
                 if now_ts >= int(open_info["close_time"]):
-                    print("\n>> 到达应收益时点，开始平仓")
+                    logger.info("\n>> 到达应收益时点，开始平仓")
                     time.sleep(40)  # 等待40秒，确保资金费率结算完成
 
                     close_okx_position_by_order_id(symbol=open_info["okx_symbol"],
@@ -550,13 +553,13 @@ def arbitrage_loop():
                     close_backpack_position_by_order_id(symbol=open_info["backpack_symbol"],
                                                         order_id=open_info["backpack_order_id"],
                                                         backpack_qty=open_info["backpack_qty"])
-                    print("[OKX]平仓", open_info["okx_symbol"])
-                    print("[Backpack]平仓", open_info["backpack_symbol"])
+                    logger.info("[OKX]平仓", open_info["okx_symbol"])
+                    logger.info("[Backpack]平仓", open_info["backpack_symbol"])
 
                     is_open = False
                     open_info = {}
                 else:
-                    print(">> 未到结算时间，预估收益情况:")
+                    logger.info(">> 未到结算时间，预估收益情况:")
                     # 计算预计获利
                     okx_symbol = open_info.get("okx_symbol")
                     backpack_symbol = open_info.get("backpack_symbol")
@@ -571,17 +574,17 @@ def arbitrage_loop():
                         # 假设持有1个周期（8小时），年化换算：单次收益 * 3 * 365
                         profit = rate_diff * MAX_LEVERAGE * MAX_ORDER_USD
                         annualized = abs(rate_diff) * 3 * 365
-                        print(f"预计本周期获利: {profit:.2f} USDT, 年化: {annualized:.2%}")
+                        logger.info(f"预计本周期获利: {profit:.2f} USDT, 年化: {annualized:.2%}")
                     except Exception as e:
-                        print(f"计算预计获利失败: {e}")
+                        logger.info(f"计算预计获利失败: {e}")
 
             if is_open:
                 time.sleep(300)  # 每5分钟重试
             else:
                 time.sleep(60*15)  # 每15分钟检查一次套利机会
         except Exception as e:
-            print("[异常]", e)
-            print("正在取消所有当前标的开单并重试...")
+            logger.info("[异常]", e)
+            logger.info("正在取消所有当前标的开单并重试...")
             if is_open:
                 close_okx_position_by_order_id(symbol=open_info["okx_symbol"],
                                                order_id=open_info["okx_order_id"],

@@ -1,4 +1,5 @@
 import datetime
+import threading
 import time
 
 import numpy as np
@@ -8,7 +9,7 @@ from okx import Account, Trade, Funding, PublicData, MarketData
 from arbitrage_bot.backpack_okx_arbitrage_bot import close_backpack_position_by_order_id, \
     SYMBOL_OKX_INSTRUMENT_MAP, calc_qty, execute_okx_order_swap, close_okx_position_by_order_id
 from backpack_exchange.trade_prepare import proxy_on, load_okx_api_keys_trade_cat_okx_trend, okx_account_api_test, \
-    okx_trade_api_test
+    okx_trade_api_test, okx_market_api_test
 from okx_exchange.macd_signal import macd_signals
 from utils.logging_setup import setup_logger
 
@@ -101,15 +102,16 @@ def monitor_position(okx_price, direction, order_id, okx_qty, leverage=LEVERAGE,
     close_backpack_position_by_order_id(monitor_symbol, order_id, okx_qty)
 
 
-def fetch_kline_data(kline_symbol=SYMBOL, interval="5m", limit=30):
+def fetch_kline_data(market_api=okx_market_api, kline_symbol=SYMBOL, interval="5m", limit=30):
     """
     获取指定交易对的最新已经完结limit根K线数据，返回数据由新到旧排序，最新的K可能未结束
+    :param market_api:
     :param kline_symbol: 交易对符号
     :param interval: K线周期
     :param limit: 返回的K线数量
     :return: K线数据列表
     """
-    klines = okx_market_api.get_mark_price_candlesticks(instId=kline_symbol, bar=interval, limit=limit)
+    klines = market_api.get_mark_price_candlesticks(instId=kline_symbol, bar=interval, limit=limit)
     if not klines or "data" not in klines or len(klines["data"]) < limit:
         raise Exception(f"获取K线数据失败: {klines.get('msg', '未知错误')}")
     klines_data = klines["data"]
@@ -147,7 +149,7 @@ def monitor_position_macd(direction_symbol=SYMBOL):
     while True:
         logger.info("开始新一轮信号计算")
         klines_interval = str(interval) + "m"
-        klines = fetch_kline_data(kline_symbol=direction_symbol, interval=klines_interval, limit=50)
+        klines = fetch_kline_data(market_api=okx_market_api_test, kline_symbol=direction_symbol, interval=klines_interval, limit=50)
         macd_signal = macd_signals(klines)
 
         macd_signal_target = {}
@@ -280,4 +282,12 @@ def get_open_direction_15mkline(kline_symbol=SYMBOL):
 
 
 if __name__ == "__main__":
-    monitor_position_macd(direction_symbol=SYMBOL)
+    threads = []
+    for SYMBOL in TREND_SYMBOL_LIST:
+        t = threading.Thread(target=monitor_position_macd, args=(SYMBOL,), name=f"Thread-{SYMBOL}")
+        t.start()
+        time.sleep(40)
+        threads.append(t)
+    for t in threads:
+        t.join()
+    # monitor_position_macd(direction_symbol=SYMBOL)
