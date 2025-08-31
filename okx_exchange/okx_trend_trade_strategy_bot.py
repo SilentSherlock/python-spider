@@ -191,6 +191,12 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                                                trade_api=trade_api)
                 position = None
                 logger.info("平仓完成，等待下一次开仓信号")
+                okx_trade_macd_logger.info("平仓macd_signal: " + str(macd_signal_target))
+                okx_trade_macd_logger.info(f"long_signal_2: {long_signal_2}, long_signal_1: {long_signal_1}, "
+                                           f"long_signal_3: {long_signal_3}, long_signal_4: {long_signal_4}, "
+                                           f"long_signal_5: {long_signal_5}, short_signal_2: {short_signal_2}, "
+                                           f"short_signal_1: {short_signal_1}, short_signal_3: {short_signal_3}, "
+                                           f"short_signal_4: {short_signal_4}, short_signal_5: {short_signal_5}")
             else:
                 logger.info("持仓中，等待下一次平仓信号 " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
