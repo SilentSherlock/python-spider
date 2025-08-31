@@ -215,7 +215,7 @@ if __name__ == "__main__":
         #                      args=(SYMBOL, okx_account_api, okx_trade_api, okx_market_api),
         #                      name=f"Thread-{SYMBOL}")
         t.start()
-        time.sleep(40)
+        time.sleep(200)
         threads.append(t)
     for t in threads:
         t.join()
