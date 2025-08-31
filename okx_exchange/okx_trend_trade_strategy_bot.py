@@ -6,7 +6,7 @@ from arbitrage_bot.backpack_okx_arbitrage_bot import SYMBOL_OKX_INSTRUMENT_MAP, 
     close_okx_position_by_order_id
 from backpack_exchange.trade_prepare import proxy_on, okx_account_api_test, \
     okx_trade_api_test, okx_market_api_test, okx_market_api, okx_account_api, okx_trade_api
-from okx_exchange.macd_signal import macd_signals
+from okx_exchange.macd_signal import macd_signals, macd_signals_5m
 from utils.logging_setup import setup_logger, setup_okx_macd_logger
 
 # 启用代理与加载密钥
@@ -85,7 +85,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
         klines_interval = str(interval) + "m"
         klines = fetch_kline_data(market_api=market_api, kline_symbol=direction_symbol, interval=klines_interval,
                                   limit=50)
-        macd_signal = macd_signals(klines)
+        macd_signal = macd_signals_5m(klines)
 
         macd_signal_target = {}
         for key in macd_signal.iloc[-1].keys():

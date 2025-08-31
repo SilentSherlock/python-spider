@@ -205,6 +205,15 @@ def macd_signals(kline_data, price_col='close',
     return d
 
 
+# 5分钟K线的MACD信号（参数可调）
+def macd_signals_5m(kline_data):
+    return macd_signals(kline_data, price_col='close',
+                        fast=8, slow=21, signal=5,
+                        pivot_win=2, use_for_div='MACD_HIST',
+                        lookback_double=50, peak_window=4,
+                        span_converge=20, tight_pct=0.4, momentum_len=2)
+
+
 # -----------------------------
 # 7) 用法示例
 # -----------------------------
