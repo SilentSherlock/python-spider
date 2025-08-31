@@ -11,11 +11,12 @@ from arbitrage_bot.backpack_okx_arbitrage_bot import close_backpack_position_by_
 from backpack_exchange.trade_prepare import proxy_on, load_okx_api_keys_trade_cat_okx_trend, okx_account_api_test, \
     okx_trade_api_test, okx_market_api_test
 from okx_exchange.macd_signal import macd_signals
-from utils.logging_setup import setup_logger
+from utils.logging_setup import setup_logger, setup_okx_macd_logger
 
 # 启用代理与加载密钥
 proxy_on()
 logger = setup_logger(__name__)
+okx_trade_macd_logger = setup_okx_macd_logger()
 
 okx_live_trading = "0"
 OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE = load_okx_api_keys_trade_cat_okx_trend()
@@ -202,6 +203,12 @@ def monitor_position_macd(direction_symbol=SYMBOL):
                 logger.info("无开仓信号，继续等待")
             else:
                 logger.info("开仓信号出现，准备开仓，方向: " + direction)
+                okx_trade_macd_logger.info("开仓macd_signal: " + str(macd_signal_target))
+                okx_trade_macd_logger.info(f"long_signal_2: {long_signal_2}, long_signal_1: {long_signal_1}, "
+                                           f"long_signal_3: {long_signal_3}, long_signal_4: {long_signal_4}, "
+                                           f"long_signal_5: {long_signal_5}, short_signal_2: {short_signal_2}, "
+                                           f"short_signal_1: {short_signal_1}, short_signal_3: {short_signal_3}, "
+                                           f"short_signal_4: {short_signal_4}, short_signal_5: {short_signal_5}")
                 ticker_price = float(klines[0][4])  # 最新k线的收盘价
                 # 计算开仓数量
                 okx_ctval = float(SYMBOL_OKX_INSTRUMENT_MAP[direction_symbol]["ctVal"])  # 合约面值

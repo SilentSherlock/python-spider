@@ -6,8 +6,10 @@ import os
 LOG_DIR = "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
-# 日志文件路径
+# 运行日志文件路径
 LOG_FILE = os.path.join(LOG_DIR, "app.log")
+# okx开立交易macd指标文件路径
+okx_trade_macd_file = os.path.join(LOG_DIR, "okx_trade_macd.log")
 
 
 def setup_logger(name: str = "app"):
@@ -40,6 +42,35 @@ def setup_logger(name: str = "app"):
 
     # 添加到logger
     logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+
+    return logger
+
+
+def setup_okx_macd_logger():
+    """
+    创建并返回一个专门用于记录okx macd指标的logger
+    """
+    logger = logging.getLogger("okx_macd")
+    logger.setLevel(logging.DEBUG)
+
+    # 如果已经有 handler，避免重复添加
+    if logger.handlers:
+        return logger
+
+    # 日志格式
+    formatter = logging.Formatter(
+        fmt="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    # 文件输出（按日期切分，每天一个文件，保留30天）
+    file_handler = logging.handlers.TimedRotatingFileHandler(
+        okx_trade_macd_file, when="midnight", interval=1, backupCount=30, encoding="utf-8"
+    )
+    file_handler.setFormatter(formatter)
+
+    # 添加到logger
     logger.addHandler(file_handler)
 
     return logger
