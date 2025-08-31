@@ -147,7 +147,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                 # 计算开仓数量
                 okx_ctval = float(SYMBOL_OKX_INSTRUMENT_MAP[direction_symbol]["ctVal"])  # 合约面值
                 okx_minsz = float(SYMBOL_OKX_INSTRUMENT_MAP[direction_symbol]["minsz"])  # 最小张数
-                raw_okx_qty = calc_qty(ticker_price / 2, MARGIN, LEVERAGE, okx_ctval)
+                raw_okx_qty = calc_qty(ticker_price, MARGIN, LEVERAGE, okx_ctval)
                 okx_qty = int(raw_okx_qty // okx_minsz) * okx_minsz
                 okx_qty = round(okx_qty, 4)
                 # 执行开仓
