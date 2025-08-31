@@ -60,7 +60,7 @@ def setup_okx_macd_logger():
 
     # 日志格式
     formatter = logging.Formatter(
-        fmt="%(asctime)s [%(levelname)s] %(message)s",
+        fmt="%(asctime)s [%(levelname)s] [%(threadName)s] [%(name)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
