@@ -155,6 +155,7 @@ def divergences(df: pd.DataFrame, price_col='close', pivot_win=3, use='MACD_HIST
 def consolidation_and_momentum(df: pd.DataFrame, span=20, tight_pct=0.15, momentum_len=4) -> pd.DataFrame:
     """
     双线粘合：|DIF-DEA| 的分位阈值判定，低于 tight_pct 分位视为粘合（震荡）
+    当快慢线差值小于“历史span根里的15%低分位值”时，认为快慢线粘合（震荡）
     柱状图动能：最近N根绝对值连续放大/缩短
     """
     d = df.copy()
@@ -171,6 +172,7 @@ def consolidation_and_momentum(df: pd.DataFrame, span=20, tight_pct=0.15, moment
     d['hist_contracting'] = dec.rolling(momentum_len).sum() == momentum_len  # 连续缩短
     return d
 
+
 # 计算ema交叉
 def ema_cross(df: pd.DataFrame, price_col='close', fast=5, slow=10) -> pd.DataFrame:
     """
@@ -185,6 +187,7 @@ def ema_cross(df: pd.DataFrame, price_col='close', fast=5, slow=10) -> pd.DataFr
     d['ema_death_cross'] = (prev_fast > prev_slow) & (d['EMA_FAST'] < d['EMA_SLOW'])
     return d
 
+
 # -----------------------------
 # 6) 一键生成所有信号
 # -----------------------------
@@ -192,7 +195,7 @@ def macd_signals(kline_data, price_col='close',
                  fast=12, slow=26, signal=9,
                  pivot_win=3, use_for_div='MACD_HIST',
                  lookback_double=80, peak_window=6,
-                 span_converge=20, tight_pct=0.15, momentum_len=3):
+                 span_converge=20, tight_pct=0.3, momentum_len=3):
     d = calc_macd(kline_data, fast, slow, signal, price_col)
     d = crosses(d)
     d = double_cross(d, lookback=lookback_double, peak_window=peak_window)
