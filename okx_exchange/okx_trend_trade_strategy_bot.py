@@ -108,10 +108,12 @@ def monitor_position_macd(direction_symbol=SYMBOL,
             not macd_signal_target['lines_converge'])
         # 反转抄底信号
         long_signal_3 = macd_signal_target["bullish_div"] and macd_signal_target["hist_red_to_green"]
-        # 低位金叉+反转
-        long_signal_4 = long_signal_1 and macd_signal_target["hist_red_to_green"]
-        # ema金叉+低位金叉
-        long_signal_5 = macd_signal_target["ema_golden_cross"] and long_signal_1
+        # 低位金叉+反转+非收敛
+        long_signal_4 = (long_signal_1 and macd_signal_target["hist_red_to_green"]
+                         and (not macd_signal_target["lines_converge"]))
+        # ema金叉+低位金叉+非收敛
+        long_signal_5 = macd_signal_target["ema_golden_cross"] and long_signal_1\
+                        and (not macd_signal_target["lines_converge"])
 
         # 高位死叉信息
         short_signal_1 = macd_signal_target["death_cross"] and (macd_signal_target["DIF"] > 0)
@@ -119,10 +121,10 @@ def monitor_position_macd(direction_symbol=SYMBOL,
         short_signal_2 = macd_signal_target["zero_down"] and macd_signal_target["hist_expanding"]
         # 反转抄底信号
         short_signal_3 = macd_signal_target["bearish_div"] and macd_signal_target["hist_green_to_red"]
-        # 高位死叉+反转
-        short_signal_4 = short_signal_1 and macd_signal_target["hist_green_to_red"]
-        # 高位死叉+ema死叉
-        short_signal_5 = macd_signal_target["ema_death_cross"] and short_signal_1
+        # 高位死叉+反转+非收敛
+        short_signal_4 = short_signal_1 and macd_signal_target["hist_green_to_red"] and (not macd_signal_target["lines_converge"])
+        # 高位死叉+ema死叉+非收敛
+        short_signal_5 = macd_signal_target["ema_death_cross"] and short_signal_1 and (not macd_signal_target["lines_converge"])
 
         if position is None:
             logger.info("当前无持仓，进行开仓判断")
