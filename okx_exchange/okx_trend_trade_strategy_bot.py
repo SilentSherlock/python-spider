@@ -28,6 +28,7 @@ MARGIN = 50  # 保证金
 LEVERAGE = 15
 LOSS_LIMIT = 0.2  # 亏损20%止损
 PROFIT_DRAWBACK = 0.2  # 盈利回撤20%止盈保护
+WIN_LIMIT_5k = 0.1  # 盈利10%止盈
 
 
 def fetch_kline_data(market_api=okx_market_api_test, kline_symbol=SYMBOL, interval="5m", limit=30):
@@ -51,7 +52,8 @@ def fetch_kline_data(market_api=okx_market_api_test, kline_symbol=SYMBOL, interv
 def monitor_position_macd(direction_symbol=SYMBOL,
                           account_api=okx_account_api_test,
                           trade_api=okx_trade_api_test,
-                          market_api=okx_market_api_test):
+                          market_api=okx_market_api_test,
+                          k_rate=5):
     """
     计算指定交易对的最新MACD指标，进行开仓
     策略：
@@ -63,6 +65,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
     若开仓，进入持仓监控：
     * 进行关仓方向判断
     * 判断需要关单时，调用方法进行平仓
+    :param k_rate: 交易频率，单位分钟
     :param market_api:
     :param trade_api:
     :param account_api:
@@ -72,7 +75,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
     position = None  # 持仓信息，格式：{'order_id':..., 'direction':..., 'qty':...}
     # 整15启动，以便获取完结的K线，同时尽可能避免数据损失
     # 延迟到最近的整15分钟再启动
-    interval = 5
+    interval = k_rate
     now = datetime.datetime.now()
     delay_minutes = (interval - now.minute % interval) % interval
     delay_seconds = (delay_minutes * 60 - now.second) + 40  # 多等40秒，确保K线完结
@@ -174,12 +177,41 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                     "entry_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "okx_qty": okx_qty,
                     "okx_direction": direction,
+                    "okx_entry_price": None,  # 开仓均价，后续更新
                 }
                 logger.info(f"开仓: 订单ID: {position['okx_order_id']}, 方向: {direction}, 数量: {okx_qty}, ")
         else:
-            # 已持仓，判断是否需要平仓
             close_flag = False
-            # close_flag = True
+
+            # 已持仓，计算大概盈亏
+            if position["okx_entry_price"] is None:
+                order_info = trade_api.get_order(instId=position["okx_symbol"], ordId=position["okx_order_id"])
+                if order_info.get("code") == "0" and order_info.get("data"):
+                    order_info_data = order_info["data"][0]
+                    avg_px = float(order_info_data.get("avgPx", "0"))
+                    position["okx_entry_price"] = avg_px if avg_px > 0 else position["okx_entry_price"]  # 更新为实际成交均价
+            if position["okx_entry_price"] is not None:
+                okx_ticker = market_api.get_ticker(position["okx_symbol"])
+                okx_price = float(
+                    okx_ticker["data"][0]["last"]) if okx_ticker and "data" in okx_ticker else None
+                if okx_price:
+                    if position["okx_direction"] == "long":
+                        change_pct = (okx_price - position["okx_entry_price"]) / position["okx_entry_price"]
+                    elif position["okx_direction"] == "short":
+                        change_pct = (position["okx_entry_price"] - okx_price) / position["okx_entry_price"]
+                    else:
+                        change_pct = 0
+                    logger.info(f"持仓中，当前价格: {okx_price}, 开仓均价: {position['okx_entry_price']}, "
+                                f"浮动盈亏: {change_pct:.4%}")
+                    okx_trade_macd_logger.info(
+                        f"持仓中，当前价格: {okx_price}, 开仓均价: {position['okx_entry_price']}, "
+                        f"浮动盈亏: {change_pct:.4%}")
+
+                    # 5分钟k,10%止盈
+                    if change_pct >= WIN_LIMIT_5k and k_rate == 5:
+                        logger.info(f"触发止损条件，准备平仓")
+                        close_flag = True
+
             if "long" == position.get("okx_direction"):
                 if (short_signal_2 or short_signal_1 or short_signal_3 or short_signal_4 or short_signal_5
                         or macd_signal_target["zero_down"] or macd_signal_target["death_cross"]):
@@ -188,6 +220,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                 if long_signal_2 or long_signal_1 or long_signal_3 or long_signal_4 or long_signal_5 \
                         or macd_signal_target["zero_up"] or macd_signal_target["golden_cross"]:
                     close_flag = True
+
             if close_flag:
                 close_okx_position_by_order_id(symbol=position["okx_symbol"],
                                                order_id=position["okx_order_id"],
@@ -210,15 +243,20 @@ def monitor_position_macd(direction_symbol=SYMBOL,
 if __name__ == "__main__":
     threads = []
     for SYMBOL in TREND_SYMBOL_LIST:
-        t = threading.Thread(target=monitor_position_macd,
-                             args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api_test),
-                             name=f"Thread-{SYMBOL}")
+        t1 = threading.Thread(target=monitor_position_macd,
+                              args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api_test, 5),
+                              name=f"Thread-{SYMBOL}-Test-5m")
         # t = threading.Thread(target=monitor_position_macd,
         #                      args=(SYMBOL, okx_account_api, okx_trade_api, okx_market_api),
         #                      name=f"Thread-{SYMBOL}")
-        t.start()
+        t1.start()
+        t2 = threading.Thread(target=monitor_position_macd,
+                              args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api_test, 15),
+                              name=f"Thread-{SYMBOL}-Test-15m")
+        t2.start()
         time.sleep(200)
-        threads.append(t)
+        threads.append(t1)
+        threads.append(t2)
     for t in threads:
         t.join()
     # monitor_position_macd(direction_symbol=SYMBOL)
