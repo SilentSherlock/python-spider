@@ -246,18 +246,18 @@ if __name__ == "__main__":
     threads = []
     for SYMBOL in TREND_SYMBOL_LIST:
         t1 = threading.Thread(target=monitor_position_macd,
-                              args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api_test, 5),
+                              args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api, 5),
                               name=f"Thread-{SYMBOL}-Test-5m")
         # t = threading.Thread(target=monitor_position_macd,
         #                      args=(SYMBOL, okx_account_api, okx_trade_api, okx_market_api),
         #                      name=f"Thread-{SYMBOL}")
         t1.start()
         t2 = threading.Thread(target=monitor_position_macd,
-                              args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api_test, 15),
+                              args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api, 15),
                               name=f"Thread-{SYMBOL}-Test-15m")
         t2.start()
         t3 = threading.Thread(target=monitor_position_macd,
-                              args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api_test, 60),
+                              args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api, 60),
                               name=f"Thread-{SYMBOL}-Test-1H")
         t3.start()
         time.sleep(200)
