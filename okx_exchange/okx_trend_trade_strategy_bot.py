@@ -86,6 +86,8 @@ def monitor_position_macd(direction_symbol=SYMBOL,
     while True:
         logger.info("开始新一轮信号计算")
         klines_interval = str(interval) + "m"
+        if interval == 60:
+            klines_interval = "1H"
         klines = fetch_kline_data(market_api=market_api, kline_symbol=direction_symbol, interval=klines_interval,
                                   limit=50)
         macd_signal = macd_signals_5m(klines)
@@ -254,6 +256,10 @@ if __name__ == "__main__":
                               args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api_test, 15),
                               name=f"Thread-{SYMBOL}-Test-15m")
         t2.start()
+        t3 = threading.Thread(target=monitor_position_macd,
+                              args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api_test, 60),
+                              name=f"Thread-{SYMBOL}-Test-1H")
+        t3.start()
         time.sleep(200)
         threads.append(t1)
         threads.append(t2)
