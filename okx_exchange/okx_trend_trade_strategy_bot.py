@@ -28,7 +28,7 @@ MARGIN = 50  # 保证金
 LEVERAGE = 15
 LOSS_LIMIT = 0.2  # 亏损20%止损
 PROFIT_DRAWBACK = 0.2  # 盈利回撤20%止盈保护
-WIN_LIMIT_5k = 0.1  # 盈利10%止盈
+WIN_LIMIT_5k = 0.05  # 盈利10%止盈
 
 
 def fetch_kline_data(market_api=okx_market_api_test, kline_symbol=SYMBOL, interval="5m", limit=30):
