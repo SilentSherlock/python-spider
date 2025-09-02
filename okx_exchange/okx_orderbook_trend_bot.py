@@ -1,215 +1,127 @@
 import asyncio
-import aiohttp
-import websockets
 import json
 import time
-from collections import deque, defaultdict
-from statistics import mean
+from collections import deque
 
-# ========== 参数配置 ==========
-SYMBOL = "ETH-USDT-SWAP"  # OKX 合约符号，如 BTC-USDT-SWAP / ETH-USDT-SWAP
-DEPTH_LIMIT = 5  # OKX books5, books50_l2_tbt（支持 5 / 50）
-TOP_N = 10  # OBI 前 N 档
-TFI_WINDOW_SEC = 3  # TFI 窗口（秒）
-MID_SMA_LEN = 10  # 中价短均线
-OBI_LONG_TH = 0.20
-OBI_SHORT_TH = -0.20
-TFI_LONG_TH = 0.60
-TFI_SHORT_TH = 0.40
-MIN_SIGNAL_INTERVAL = 2.0
-PRINT_EVERY = 1.0
+import numpy as np
+from okx.websocket.WsPublicAsync import WsPublicAsync
 
-# ========== OKX 端点 ==========
-REST_DEPTH = "https://www.okx.com/api/v5/market/books"
-WS_PUBLIC = "wss://ws.okx.com:8443/ws/v5/public"
+# OKX WebSocket 地址
+WS_URL = "wss://wspap.okx.com:8443/ws/v5/public"
 
+# 参数配置
+DEPTH_LEVEL = 5  # 前 5 档盘口
+WINDOW = 30  # 计算 TFI 的窗口大小（秒）
+VOLUME_SPIKE_FACTOR = 2  # 成交量放大倍数阈值
+ORDER_LIFETIME = 1.0  # 挂单最短存活时间 (秒)，小于此值视为假单
 
-# ========== 订单簿 ==========
-class OrderBook:
-    def __init__(self):
-        self.bids = defaultdict(float)
-        self.asks = defaultdict(float)
-        self.ready = False
-
-    def load_snapshot(self, snapshot):
-        self.bids.clear()
-        self.asks.clear()
-        for p, s, *_ in snapshot["bids"]:
-            self.bids[float(p)] = float(s)
-        for p, s, *_ in snapshot["asks"]:
-            self.asks[float(p)] = float(s)
-        self.ready = True
-
-    def apply_delta(self, delta):
-        for p, s, *_ in delta["bids"]:
-            p, s = float(p), float(s)
-            if s == 0:
-                self.bids.pop(p, None)
-            else:
-                self.bids[p] = s
-        for p, s, *_ in delta["asks"]:
-            p, s = float(p), float(s)
-            if s == 0:
-                self.asks.pop(p, None)
-            else:
-                self.asks[p] = s
-        return True
-
-    def top_n_imbalance(self, n=10):
-        if not self.bids or not self.asks:
-            return 0.0
-        top_bids = sorted(self.bids.items(), key=lambda x: x[0], reverse=True)[:n]
-        top_asks = sorted(self.asks.items(), key=lambda x: x[0])[:n]
-        bid_vol = sum(s for _, s in top_bids)
-        ask_vol = sum(s for _, s in top_asks)
-        total = bid_vol + ask_vol
-        if total <= 0:
-            return 0.0
-        return (bid_vol - ask_vol) / total
-
-    def best_bid(self):
-        return max(self.bids.keys()) if self.bids else None
-
-    def best_ask(self):
-        return min(self.asks.keys()) if self.asks else None
-
-    def mid_price(self):
-        bb = self.best_bid()
-        ba = self.best_ask()
-        if bb is None or ba is None:
-            return None
-        return 0.5 * (bb + ba)
+# 缓存
+trades_buffer = deque(maxlen=1000)
+orderbook_snapshot = {}
+last_order_seen = {}  # {price: last_seen_timestamp}
 
 
-# ========== 成交流（TFI） ==========
-class TradeFlow:
-    def __init__(self, window_sec=3):
-        self.window_sec = window_sec
-        self.buffer = deque()
+async def okx_strategy(symbol="BTC-USDT-SWAP", k_rate=5):
+    async with WsPublicAsync(WS_URL) as ws:
+        if k_rate == 5:
+            book_channel = "books5"
+            trades_channel = "trades"
 
-    def add(self, ts_ms, is_aggressive_buy):
-        now = ts_ms / 1000.0
-        self.buffer.append((now, 1 if is_aggressive_buy else 0))
-        cutoff = now - self.window_sec
-        while self.buffer and self.buffer[0][0] < cutoff:
-            self.buffer.popleft()
-
-    def tfi(self):
-        if not self.buffer:
-            return 0.5
-        buys = sum(x for _, x in self.buffer)
-        return buys / len(self.buffer)
-
-
-# ========== 信号器 ==========
-class SignalEngine:
-    def __init__(self):
-        self.mid_ma = deque(maxlen=MID_SMA_LEN)
-        self.last_signal_ts = 0.0
-
-    def update_mid(self, mid):
-        if mid is not None:
-            self.mid_ma.append(mid)
-
-    def mid_above_ma(self, last_mid):
-        if len(self.mid_ma) < self.mid_ma.maxlen:
-            return False
-        return last_mid > mean(self.mid_ma)
-
-    def mid_below_ma(self, last_mid):
-        if len(self.mid_ma) < self.mid_ma.maxlen:
-            return False
-        return last_mid < mean(self.mid_ma)
-
-    def throttled(self):
-        now = time.time()
-        if now - self.last_signal_ts < MIN_SIGNAL_INTERVAL:
-            return True
-        self.last_signal_ts = now
-        return False
-
-    def decide(self, obi, tfi, last_mid):
-        if last_mid is None:
-            return "no-signal"
-        if (obi > OBI_LONG_TH) and (tfi > TFI_LONG_TH) and self.mid_above_ma(last_mid):
-            if not self.throttled():
-                return "long"
-        elif (obi < OBI_SHORT_TH) and (tfi < TFI_SHORT_TH) and self.mid_below_ma(last_mid):
-            if not self.throttled():
-                return "short"
-        return "no-signal"
-
-
-# ========== 工具 ==========
-async def fetch_snapshot(session, symbol, depth="5"):
-    params = {"instId": symbol, "sz": depth}
-    async with session.get(REST_DEPTH, params=params, timeout=10) as resp:
-        resp.raise_for_status()
-        data = await resp.json()
-        return data["data"][0]
-
-
-# ========== 主流程 ==========
-async def run(symbol=SYMBOL):
-    ob = OrderBook()
-    tf = TradeFlow(window_sec=TFI_WINDOW_SEC)
-    se = SignalEngine()
-
-    async with aiohttp.ClientSession() as session:
-        snapshot = await fetch_snapshot(session, symbol, str(DEPTH_LIMIT))
-        ob.load_snapshot(snapshot)
-
-    async with websockets.connect(WS_PUBLIC, ping_interval=20, ping_timeout=20) as ws:
+        # 订阅订单簿和成交流
         sub_msg = {
             "op": "subscribe",
             "args": [
-                {"channel": f"books{DEPTH_LIMIT}", "instId": symbol},
-                {"channel": "trades", "instId": symbol}
+                {"channel": book_channel, "instId": symbol},  # 订单簿 top5
+                {"channel": trades_channel, "instId": symbol}  # 成交流
             ]
         }
         await ws.send(json.dumps(sub_msg))
+        print(f"✅ Subscribed to {symbol} orderbook & trades")
 
-        last_print = 0.0
         while True:
             msg = await ws.recv()
             data = json.loads(msg)
+
             if "arg" not in data:
                 continue
 
             channel = data["arg"]["channel"]
-            if channel.startswith("books"):
-                for update in data.get("data", []):
-                    ob.apply_delta(update)
-                    mid = ob.mid_price()
-                    se.update_mid(mid)
 
-            elif channel == "trades":
-                for t in data.get("data", []):
-                    ts = int(t["ts"])
-                    side = t["side"]  # "buy"/"sell"
-                    is_aggr_buy = (side == "buy")
-                    tf.add(ts, is_aggr_buy)
+            if channel == book_channel and "data" in data:
+                process_orderbook(data["data"][0])
 
-            now = time.time()
-            if now - last_print >= PRINT_EVERY:
-                last_print = now
-                obi = ob.top_n_imbalance(TOP_N)
-                tfi = tf.tfi()
-                mid = ob.mid_price()
-                bb, ba = ob.best_bid(), ob.best_ask()
+            elif channel == trades_channel and "data" in data:
+                for trade in data["data"]:
+                    process_trade(trade)
 
-                signal = se.decide(obi, tfi, mid)
-                print(
-                    f"[{symbol}] bb={bb:.2f} ba={ba:.2f} mid={mid:.2f} "
-                    f"OBI({TOP_N})={obi:+.3f} TFI({TFI_WINDOW_SEC}s)={tfi:.2f} "
-                    f"signal={signal}"
-                )
+            # 每 5 秒计算一次信号
+            if int(time.time()) % 5 == 0:
+                signal = generate_signal()
+                if signal:
+                    print(f"🚨 Signal: {signal} at {time.strftime('%X')}")
+
+
+def process_orderbook(orderbook):
+    global orderbook_snapshot
+    ts = time.time()
+    bids = [(float(p), float(sz)) for p, sz, _, _ in orderbook["bids"][:DEPTH_LEVEL]]
+    asks = [(float(p), float(sz)) for p, sz, _, _ in orderbook["asks"][:DEPTH_LEVEL]]
+
+    # 过滤掉寿命过短的挂单
+    for side in [bids, asks]:
+        for p, sz in side:
+            if sz > 0:
+                if p not in last_order_seen:
+                    last_order_seen[p] = ts
+                elif ts - last_order_seen[p] < ORDER_LIFETIME:
+                    sz = 0  # 视为假单
+            else:
+                last_order_seen.pop(p, None)
+
+    orderbook_snapshot = {"bids": bids, "asks": asks}
+
+
+def process_trade(trade):
+    """缓存成交流数据"""
+    trades_buffer.append({
+        "side": trade["side"],  # buy / sell
+        "sz": float(trade["sz"]),
+        "ts": int(trade["ts"])
+    })
+
+
+def generate_signal():
+    if not orderbook_snapshot or not trades_buffer:
+        return None
+
+    # 1) OBI 订单簿不平衡
+    bid_vol = sum(sz for _, sz in orderbook_snapshot["bids"])
+    ask_vol = sum(sz for _, sz in orderbook_snapshot["asks"])
+    obi = (bid_vol - ask_vol) / (bid_vol + ask_vol + 1e-9)
+
+    # 2) TFI 成交流不平衡（最近 WINDOW 秒）
+    now = int(time.time() * 1000)
+    recent_trades = [t for t in trades_buffer if now - t["ts"] <= WINDOW * 1000]
+    buy_vol = sum(t["sz"] for t in recent_trades if t["side"] == "buy")
+    sell_vol = sum(t["sz"] for t in recent_trades if t["side"] == "sell")
+    tfi = (buy_vol - sell_vol) / (buy_vol + sell_vol + 1e-9)
+
+    # 3) 成交量放大确认
+    vols = [t["sz"] for t in trades_buffer]
+    if len(vols) < 20:
+        return None
+    avg_vol = np.mean(vols[-20:])
+    latest_vol = vols[-1]
+    volume_spike = latest_vol > VOLUME_SPIKE_FACTOR * avg_vol
+
+    # 4) 组合判断
+    if obi > 0.2 and tfi > 0.2 and volume_spike:
+        return "LONG ✅"
+    elif obi < -0.2 and tfi < -0.2 and volume_spike:
+        return "SHORT ✅"
+    else:
+        return None
 
 
 if __name__ == "__main__":
-    """
-    运行：
-        pip install aiohttp websockets
-        python okx_orderflow.py
-    """
-    asyncio.run(run(SYMBOL))
+    asyncio.run(okx_strategy("BTC-USDT-SWAP"))

@@ -205,7 +205,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                                     f"浮动盈亏: {change_pct:.4%}")
                         okx_trade_macd_logger.info(
                             f"持仓中，当前价格: {okx_price}, 开仓均价: {position['okx_entry_price']}, "
-                            f"浮动盈亏: {change_pct:.4%}")
+                            f"浮动盈亏: {change_pct:.4%}, 方向{position['okx_direction']}, ")
 
                         # 5分钟k,10%止盈
                         if change_pct >= WIN_LIMIT_5k and k_rate == 5:
