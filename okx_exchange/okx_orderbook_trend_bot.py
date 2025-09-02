@@ -1,11 +1,13 @@
 import asyncio
 import json
+import threading
 import time
 from collections import deque
 
 import numpy as np
 from okx.websocket.WsPublicAsync import WsPublicAsync
 
+from okx_exchange.okx_trend_trade_strategy_bot import TREND_SYMBOL_LIST
 from utils.logging_setup import setup_logger
 
 # OKX WebSocket 地址
@@ -27,7 +29,7 @@ logger = setup_logger("okx_strategy_trend")
 signal_logger = setup_logger("okx_strategy_trend_signals")
 
 
-async def okx_strategy(symbol="BTC-USDT-SWAP", k_rate=5):
+async def okx_strategy(strategy_symbol="BTC-USDT-SWAP", k_rate=5):
     ws = WsPublicAsync(url=WS_URL)
     await ws.start()
     book_channel = ""
@@ -38,12 +40,12 @@ async def okx_strategy(symbol="BTC-USDT-SWAP", k_rate=5):
 
     # 订阅订单簿和成交流
     args = [
-        {"channel": book_channel, "instId": symbol},  # 订单簿 top5
-        {"channel": trades_channel, "instId": symbol}  # 成交流
+        {"channel": book_channel, "instId": strategy_symbol},  # 订单簿 top5
+        {"channel": trades_channel, "instId": strategy_symbol}  # 成交流
     ]
 
     def ws_message_callback(msg):
-        logger.info(f"✅ Subscribed to {symbol} orderbook & trades")
+        logger.info(f"✅ Subscribed to {strategy_symbol} orderbook & trades")
         data = json.loads(msg)
 
         if "arg" not in data:
@@ -63,7 +65,7 @@ async def okx_strategy(symbol="BTC-USDT-SWAP", k_rate=5):
         if int(time.time()) % 5 == 0:
             signal = generate_signal()
             if signal:
-                signal_logger.info(f"🚨 Signal: {signal} at {time.strftime('%X')}")
+                signal_logger.info(f"🚨 Signal: {signal} at {time.strftime('%X')} for {strategy_symbol}")
 
     await ws.subscribe(params=args, callback=ws_message_callback)
     while True:
@@ -132,12 +134,23 @@ def generate_signal():
 
     # 4) 组合判断
     if obi > 0.2 and tfi > 0.2 and volume_spike:
+        signal_logger.info(f"OBI: {obi:.3f}, TFI: {tfi:.3f}, Latest Vol: {latest_vol}, Avg Vol: {avg_vol:.3f}"
+                           f", Volume Spike: {volume_spike}")
         return "long"
     elif obi < -0.2 and tfi < -0.2 and volume_spike:
+        signal_logger.info(f"OBI: {obi:.3f}, TFI: {tfi:.3f}, Latest Vol: {latest_vol}, Avg Vol: {avg_vol:.3f}"
+                           f", Volume Spike: {volume_spike}")
         return "short"
     else:
         return None
 
 
 if __name__ == "__main__":
-    asyncio.run(okx_strategy("BTC-USDT-SWAP"))
+    threads = []
+    for symbol in TREND_SYMBOL_LIST:
+        t = threading.Thread(target=lambda: asyncio.run(okx_strategy(strategy_symbol=symbol, k_rate=5)),
+                             name=f"OkxOrderbookTrendBot-{symbol}")
+        t.start()
+        time.sleep(100)
+    for t in threads:
+        t.join()

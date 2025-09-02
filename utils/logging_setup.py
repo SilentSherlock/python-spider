@@ -35,9 +35,11 @@ def setup_logger(name: str = "app"):
 
     # 文件输出（按日期切分，每天一个文件，保留7天）
     # 运行日志文件路径
+
+
     log_file = os.path.join(LOG_DIR, name + ".log")
-    file_handler = logging.handlers.TimedRotatingFileHandler(
-        log_file, when="midnight", interval=1, backupCount=7, encoding="utf-8"
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_file, maxBytes=300*1024*1024, backupCount=7, encoding="utf-8",
     )
     file_handler.setFormatter(formatter)
 
