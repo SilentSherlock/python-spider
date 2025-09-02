@@ -6,8 +6,7 @@ import os
 LOG_DIR = "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
-# 运行日志文件路径
-LOG_FILE = os.path.join(LOG_DIR, "app.log")
+
 # okx开立交易macd指标文件路径
 okx_trade_macd_file = os.path.join(LOG_DIR, "okx_trade_macd.log")
 
@@ -35,8 +34,10 @@ def setup_logger(name: str = "app"):
     console_handler.setFormatter(formatter)
 
     # 文件输出（按日期切分，每天一个文件，保留7天）
+    # 运行日志文件路径
+    log_file = os.path.join(LOG_DIR, name + ".log")
     file_handler = logging.handlers.TimedRotatingFileHandler(
-        LOG_FILE, when="midnight", interval=1, backupCount=7, encoding="utf-8"
+        log_file, when="midnight", interval=1, backupCount=7, encoding="utf-8"
     )
     file_handler.setFormatter(formatter)
 

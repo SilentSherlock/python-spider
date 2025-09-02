@@ -13,12 +13,12 @@ WS_URL = "wss://wspap.okx.com:8443/ws/v5/public"
 
 # 参数配置
 DEPTH_LEVEL = 5  # 前 5 档盘口
-WINDOW = 30  # 计算 TFI 的窗口大小（秒）
+WINDOW = 60  # 计算 TFI 的窗口大小（秒）
 VOLUME_SPIKE_FACTOR = 2  # 成交量放大倍数阈值
-ORDER_LIFETIME = 1.0  # 挂单最短存活时间 (秒)，小于此值视为假单
+ORDER_LIFETIME = 10 * 1000  # 挂单最短存活时间 (毫秒)，小于此值视为假单
 
 # 缓存
-trades_buffer = deque(maxlen=1000)
+trades_buffer = deque(maxlen=10000)
 orderbook_snapshot = {}
 last_order_seen = {}  # {price: last_seen_timestamp}
 
@@ -43,12 +43,12 @@ async def okx_strategy(symbol="BTC-USDT-SWAP", k_rate=5):
 
     def ws_message_callback(msg):
         logger.info(f"✅ Subscribed to {symbol} orderbook & trades")
-        data = msg
+        data = json.loads(msg)
 
         if "arg" not in data:
             logger.info(f"Received non-arg message: {data}")
             return
-
+        logger.info(f"Received message: {data}")
         channel = data["arg"]["channel"]
 
         if channel == book_channel and "data" in data:
@@ -66,7 +66,7 @@ async def okx_strategy(symbol="BTC-USDT-SWAP", k_rate=5):
 
     await ws.subscribe(params=args, callback=ws_message_callback)
     while True:
-        await asyncio.sleep(1)
+        await asyncio.sleep(1000)
 
 
 def process_orderbook(orderbook):
@@ -91,6 +91,7 @@ def process_orderbook(orderbook):
         return filtered
 
     orderbook_snapshot = {"bids": filter_orders(bids), "asks": filter_orders(asks)}
+    logger.info(f"Updated orderbook snapshot at {time.strftime('%X')}")
 
 
 def process_trade(trade):
@@ -125,12 +126,14 @@ def generate_signal():
     avg_vol = np.mean(vols[-20:])
     latest_vol = vols[-1]
     volume_spike = latest_vol > VOLUME_SPIKE_FACTOR * avg_vol
+    logger.info(f"OBI: {obi:.3f}, TFI: {tfi:.3f}, Latest Vol: {latest_vol}, Avg Vol: {avg_vol:.3f}"
+                f", Volume Spike: {volume_spike}")
 
     # 4) 组合判断
     if obi > 0.2 and tfi > 0.2 and volume_spike:
-        return "LONG ✅"
+        return "long"
     elif obi < -0.2 and tfi < -0.2 and volume_spike:
-        return "SHORT ✅"
+        return "short"
     else:
         return None
 
