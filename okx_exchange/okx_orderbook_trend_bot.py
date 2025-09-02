@@ -18,12 +18,13 @@ VOLUME_SPIKE_FACTOR = 2  # 成交量放大倍数阈值
 ORDER_LIFETIME = 10 * 1000  # 挂单最短存活时间 (毫秒)，小于此值视为假单
 
 # 缓存
-trades_buffer = deque(maxlen=10000)
+trades_buffer = deque(maxlen=5000)
 orderbook_snapshot = {}
 last_order_seen = {}  # {price: last_seen_timestamp}
 
 # 日志打印
 logger = setup_logger("okx_strategy_trend")
+signal_logger = setup_logger("okx_strategy_trend_signals")
 
 
 async def okx_strategy(symbol="BTC-USDT-SWAP", k_rate=5):
@@ -62,7 +63,7 @@ async def okx_strategy(symbol="BTC-USDT-SWAP", k_rate=5):
         if int(time.time()) % 5 == 0:
             signal = generate_signal()
             if signal:
-                logger.info(f"🚨 Signal: {signal} at {time.strftime('%X')}")
+                signal_logger.info(f"🚨 Signal: {signal} at {time.strftime('%X')}")
 
     await ws.subscribe(params=args, callback=ws_message_callback)
     while True:
