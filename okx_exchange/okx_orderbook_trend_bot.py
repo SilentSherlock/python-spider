@@ -6,6 +6,8 @@ from collections import deque
 import numpy as np
 from okx.websocket.WsPublicAsync import WsPublicAsync
 
+from utils.logging_setup import setup_logger
+
 # OKX WebSocket 地址
 WS_URL = "wss://wspap.okx.com:8443/ws/v5/public"
 
@@ -20,65 +22,75 @@ trades_buffer = deque(maxlen=1000)
 orderbook_snapshot = {}
 last_order_seen = {}  # {price: last_seen_timestamp}
 
+# 日志打印
+logger = setup_logger("okx_strategy_trend")
+
 
 async def okx_strategy(symbol="BTC-USDT-SWAP", k_rate=5):
-    async with WsPublicAsync(WS_URL) as ws:
-        if k_rate == 5:
-            book_channel = "books5"
-            trades_channel = "trades"
+    ws = WsPublicAsync(url=WS_URL)
+    await ws.start()
+    book_channel = ""
+    trades_channel = ""
+    if k_rate == 5:
+        book_channel = "books5"
+        trades_channel = "trades"
 
-        # 订阅订单簿和成交流
-        sub_msg = {
-            "op": "subscribe",
-            "args": [
-                {"channel": book_channel, "instId": symbol},  # 订单簿 top5
-                {"channel": trades_channel, "instId": symbol}  # 成交流
-            ]
-        }
-        await ws.send(json.dumps(sub_msg))
-        print(f"✅ Subscribed to {symbol} orderbook & trades")
+    # 订阅订单簿和成交流
+    args = [
+        {"channel": book_channel, "instId": symbol},  # 订单簿 top5
+        {"channel": trades_channel, "instId": symbol}  # 成交流
+    ]
 
-        while True:
-            msg = await ws.recv()
-            data = json.loads(msg)
+    def ws_message_callback(msg):
+        logger.info(f"✅ Subscribed to {symbol} orderbook & trades")
+        data = msg
 
-            if "arg" not in data:
-                continue
+        if "arg" not in data:
+            logger.info(f"Received non-arg message: {data}")
+            return
 
-            channel = data["arg"]["channel"]
+        channel = data["arg"]["channel"]
 
-            if channel == book_channel and "data" in data:
-                process_orderbook(data["data"][0])
+        if channel == book_channel and "data" in data:
+            process_orderbook(data["data"][0])
 
-            elif channel == trades_channel and "data" in data:
-                for trade in data["data"]:
-                    process_trade(trade)
+        elif channel == trades_channel and "data" in data:
+            for trade in data["data"]:
+                process_trade(trade)
 
-            # 每 5 秒计算一次信号
-            if int(time.time()) % 5 == 0:
-                signal = generate_signal()
-                if signal:
-                    print(f"🚨 Signal: {signal} at {time.strftime('%X')}")
+        # 每 5 秒计算一次信号
+        if int(time.time()) % 5 == 0:
+            signal = generate_signal()
+            if signal:
+                logger.info(f"🚨 Signal: {signal} at {time.strftime('%X')}")
+
+    await ws.subscribe(params=args, callback=ws_message_callback)
+    while True:
+        await asyncio.sleep(1)
 
 
 def process_orderbook(orderbook):
     global orderbook_snapshot
     ts = time.time()
+    # 四个参数 深度价格-此价格处的数量/合约张数-已废弃字段-此价格的订单数量
     bids = [(float(p), float(sz)) for p, sz, _, _ in orderbook["bids"][:DEPTH_LEVEL]]
     asks = [(float(p), float(sz)) for p, sz, _, _ in orderbook["asks"][:DEPTH_LEVEL]]
 
     # 过滤掉寿命过短的挂单
-    for side in [bids, asks]:
-        for p, sz in side:
+    def filter_orders(orders):
+        filtered = []
+        for p, sz in orders:
             if sz > 0:
                 if p not in last_order_seen:
                     last_order_seen[p] = ts
                 elif ts - last_order_seen[p] < ORDER_LIFETIME:
-                    sz = 0  # 视为假单
+                    sz = 0
             else:
                 last_order_seen.pop(p, None)
+            filtered.append((p, sz))
+        return filtered
 
-    orderbook_snapshot = {"bids": bids, "asks": asks}
+    orderbook_snapshot = {"bids": filter_orders(bids), "asks": filter_orders(asks)}
 
 
 def process_trade(trade):
