@@ -42,6 +42,7 @@ class SymbolContext:
         self.ask_removed = deque(maxlen=10000)
         self.bid_added = deque(maxlen=10000)
         self.bid_removed = deque(maxlen=10000)
+        self.signals = deque(maxlen=600)
 
     # -------------------------
     # 数据处理
@@ -200,6 +201,18 @@ class SymbolContext:
         # 综合分
         final = 0.4 * trend_score + 0.4 * orderbook_score + 0.2 * trade_score
         final_score = int((final + 1) * 50)  # [-1,1] -> [0,100]
+
+        self.signals.append({
+            "timestamp": now_ms(),
+            "obi": obi,
+            "tfi": tfi,
+            "uptick": uptick,
+            "sweep": sweep,
+            "ofi": ofi,
+            "refill_bid": refill_bid,
+            "refill_ask": refill_ask,
+            "vol_spike": vol_spike,
+        })
         logger.info(f"[{self.symbol}] "
                     f"OBI: {obi:.3f}, TFI: {tfi:.3f}, Uptick: {uptick:.3f}, Sweep: {sweep}, OFI: {ofi:.3f}, "
                     f"Refill: ({refill_bid:.3f},{refill_ask:.3f}), VolSpike: {vol_spike:.3f} | "
