@@ -6,9 +6,20 @@ import os
 LOG_DIR = "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
-
 # okx开立交易macd指标文件路径
 okx_trade_macd_file = os.path.join(LOG_DIR, "okx_trade_macd.log")
+
+
+def base_logger():
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s [%(levelname)s] [%(threadName)s] [%(name)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(os.path.join(LOG_DIR, "app.log"), encoding="utf-8")
+        ]
+    )
 
 
 def setup_logger(name: str = "app"):
@@ -16,6 +27,7 @@ def setup_logger(name: str = "app"):
     创建并返回一个logger
     :param name: 日志器名称（建议传入模块名：__name__）
     """
+    base_logger()
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)  # 设置日志级别
 
@@ -36,10 +48,9 @@ def setup_logger(name: str = "app"):
     # 文件输出（按日期切分，每天一个文件，保留7天）
     # 运行日志文件路径
 
-
     log_file = os.path.join(LOG_DIR, name + ".log")
     file_handler = logging.handlers.RotatingFileHandler(
-        log_file, maxBytes=300*1024*1024, backupCount=7, encoding="utf-8",
+        log_file, maxBytes=300 * 1024 * 1024, backupCount=7, encoding="utf-8",
     )
     file_handler.setFormatter(formatter)
 
