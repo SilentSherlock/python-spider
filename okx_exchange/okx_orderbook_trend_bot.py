@@ -239,9 +239,9 @@ async def run_symbol(ws, symbol):
     while True:
         scores = ctx.compute_scores()
         if scores:
-            if scores["final"] > 60:
+            if scores["final"] > 80:
                 signal_logger.info(f"[{symbol}] 🚀 LONG bias | {scores}")
-            elif scores["final"] < 40:
+            elif scores["final"] < 30:
                 signal_logger.info(f"[{symbol}] 🔻 SHORT bias | {scores}")
             else:
                 signal_logger.info(f"[{symbol}] 😐 Neutral | {scores}")
