@@ -208,8 +208,8 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                             f"浮动盈亏: {change_pct:.4%}, 方向{position['okx_direction']}, ")
 
                         # 5分钟k,10%止盈
-                        if change_pct >= WIN_LIMIT_5k and k_rate == 5:
-                            logger.info(f"触发止损条件，准备平仓")
+                        if change_pct >= WIN_LIMIT_5k and k_rate <= 5:
+                            logger.info(f"触发止盈条件，准备平仓")
                             close_flag = True
 
                 if "long" == position.get("okx_direction"):
