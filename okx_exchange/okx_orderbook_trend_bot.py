@@ -13,10 +13,10 @@ from utils.logging_setup import setup_logger
 # -----------------------------
 WS_URL = "wss://wspap.okx.com:8443/ws/v5/public"
 
-DEPTH_LEVEL = 5                # 使用前 N 档计算静态 OBI 与做差
-WINDOW = 60                    # TFI / OFI / Up-tick 窗口 (秒)
-VOLUME_SPIKE_FACTOR = 2.0      # 最新成交 > avg(last_n) * factor -> 放量
-ORDER_LIFETIME_MS = 3000       # 挂单存活阈值，毫秒，小于视为“闪单”
+DEPTH_LEVEL = 5  # 使用前 N 档计算静态 OBI 与做差
+WINDOW = 60  # TFI / OFI / Up-tick 窗口 (秒)
+VOLUME_SPIKE_FACTOR = 2.0  # 最新成交 > avg(last_n) * factor -> 放量
+ORDER_LIFETIME_MS = 3000  # 挂单存活阈值，毫秒，小于视为“闪单”
 MIN_VOL_SAMPLES = 20
 
 # 动态因子阈值（经验值，实盘需调参）
@@ -25,18 +25,18 @@ OFI_TH = 0.0
 REFILL_RATIO_TH = 0.9
 UP_TICK_RATE_TH = 0.6
 SWEEP_COUNT_TH = 1
-VOLUME_SPIKE_REQUIRED = True   # 是否把 volume_spike 作为必须条件
+VOLUME_SPIKE_REQUIRED = True  # 是否把 volume_spike 作为必须条件
 
 # -----------------------------
 # 全局缓存（每个实例共用同一份结构，若多 symbol 并行，可改为 per-symbol 存储）
 # -----------------------------
-trades_buffer = deque(maxlen=10000)   # 存 (ts_ms, price, size, side)
+trades_buffer = deque(maxlen=10000)  # 存 (ts_ms, price, size, side)
 # orderbook_snapshot: {"bids":[(p,size),...], "asks":[(p,size),...]}
 orderbook_snapshot = None
 prev_orderbook_snapshot = None
 
 # orderbook delta events for dynamic OFI/refill:
-ask_added = deque()   # (ts_ms, qty)
+ask_added = deque()  # (ts_ms, qty)
 ask_removed = deque()
 bid_added = deque()
 bid_removed = deque()
@@ -48,11 +48,13 @@ last_order_seen = dict()  # price -> first_seen_ts_ms
 logger = setup_logger("okx_strategy_trend")
 signal_logger = setup_logger("okx_strategy_trend_signals")
 
+
 # -----------------------------
 # 工具函数
 # -----------------------------
 def now_ms():
     return int(time.time() * 1000)
+
 
 def prune_deques(window_sec=WINDOW):
     cutoff = now_ms() - int(window_sec * 1000)
@@ -60,9 +62,11 @@ def prune_deques(window_sec=WINDOW):
         while q and q[0][0] < cutoff:
             q.popleft()
 
+
 def map_levels_to_dict(levels):
     """levels: list of [price, size, ...] -> dict price->size"""
     return {float(p): float(s) for p, s, *rest in levels}
+
 
 # -----------------------------
 # 处理 orderbook：算快照并产生增量事件（新增/减少）
@@ -137,6 +141,7 @@ def process_orderbook_delta(new_data):
 
     logger.debug(f"Orderbook snapshot updated (ts={ts})")
 
+
 # -----------------------------
 # 处理 trade
 # -----------------------------
@@ -150,6 +155,7 @@ def process_trade_entry(tr):
     size = float(tr["sz"])
     side = tr["side"]  # 'buy' or 'sell'
     trades_buffer.append((ts, price, size, side))
+
 
 # -----------------------------
 # 动态特征计算
@@ -172,6 +178,7 @@ def compute_tfi(window_sec=WINDOW):
         return 0.0
     return (buys - sells) / total
 
+
 def compute_ofi_and_refill(window_sec=WINDOW):
     """
     OFI := (B_add - B_rm) - (A_add - A_rm) using events in window
@@ -193,6 +200,7 @@ def compute_ofi_and_refill(window_sec=WINDOW):
     refill_bid = B_add / (B_rm + 1e-9)
     return ofi_norm, refill_ask, refill_bid, A_add, A_rm, B_add, B_rm
 
+
 def compute_up_tick_rate(window_sec=WINDOW):
     """比例：最近窗口里，price > prev_price 的成交次数 / 总成交次数"""
     cutoff = now_ms() - int(window_sec * 1000)
@@ -209,6 +217,7 @@ def compute_up_tick_rate(window_sec=WINDOW):
     if total == 0:
         return 0.5
     return up / total
+
 
 def compute_sweep_count(window_sec=WINDOW):
     """
@@ -243,6 +252,7 @@ def compute_sweep_count(window_sec=WINDOW):
                     sweep += 1
     return sweep
 
+
 def compute_volume_spike():
     vols = [t[2] for t in trades_buffer]
     if len(vols) < MIN_VOL_SAMPLES:
@@ -250,6 +260,7 @@ def compute_volume_spike():
     latest = vols[-1]
     avg = float(np.mean(vols[-MIN_VOL_SAMPLES:]))
     return latest > VOLUME_SPIKE_FACTOR * avg, latest, avg
+
 
 # -----------------------------
 # 组合决策：把所有指标汇总并给出信号
@@ -297,12 +308,17 @@ def generate_signal():
         short_cond = short_cond and vol_spike
 
     if long_cond:
-        signal_logger.info(f"LONG signal. metrics: OBI:{obi:+.3f},TFI:{tfi:+.3f},OFI:{ofi_norm:+.3f}, refill_ask:{refill_ask:.3f}, up_tick:{up_tick:.3f}, sweep:{sweep}, vol:{latest_vol}/{avg_vol:.3f}")
+        signal_logger.info(
+            f"LONG signal. metrics: OBI:{obi:+.3f},TFI:{tfi:+.3f},OFI:{ofi_norm:+.3f}, refill_ask:{refill_ask:.3f}, "
+            f"up_tick:{up_tick:.3f}, sweep:{sweep}, vol:{latest_vol}/{avg_vol:.3f}")
         return "LONG"
     if short_cond:
-        signal_logger.info(f"SHORT signal. metrics: OBI:{obi:+.3f},TFI:{tfi:+.3f},OFI:{ofi_norm:+.3f}, refill_bid:{refill_bid:.3f}, up_tick:{up_tick:.3f}, sweep:{sweep}, vol:{latest_vol}/{avg_vol:.3f}")
+        signal_logger.info(
+            f"SHORT signal. metrics: OBI:{obi:+.3f},TFI:{tfi:+.3f},OFI:{ofi_norm:+.3f}, refill_bid:{refill_bid:.3f}, "
+            f"up_tick:{up_tick:.3f}, sweep:{sweep}, vol:{latest_vol}/{avg_vol:.3f}")
         return "SHORT"
     return None
+
 
 # -----------------------------
 # WebSocket 消息回调与 主流程
@@ -373,6 +389,7 @@ async def okx_strategy(strategy_symbol="BTC-USDT-SWAP", k_rate=5):
         except Exception:
             logger.exception("Error in periodic signal generation")
         await asyncio.sleep(1)
+
 
 # -----------------------------
 # 多线程启动（每个 symbol 启一个线程运行其 own event loop)
