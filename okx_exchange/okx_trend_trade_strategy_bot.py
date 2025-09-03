@@ -78,7 +78,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
     interval = k_rate
     now = datetime.datetime.now()
     delay_minutes = (interval - now.minute % interval) % interval
-    delay_seconds = (delay_minutes * 60 - now.second) + 40  # 多等40秒，确保K线完结
+    delay_seconds = (delay_minutes * 60 - now.second) + 10  # 多等40秒，确保K线完结
     if delay_seconds > 0:
         logger.info(f"延迟 {delay_seconds} 秒，等待到最近的整{interval}分钟再启动")
         time.sleep(delay_seconds)
@@ -257,8 +257,8 @@ if __name__ == "__main__":
                               name=f"Thread-{SYMBOL}-Test-15m")
         t2.start()
         t3 = threading.Thread(target=monitor_position_macd,
-                              args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api, 60),
-                              name=f"Thread-{SYMBOL}-Test-1H")
+                              args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api, 1),
+                              name=f"Thread-{SYMBOL}-Test-1m")
         t3.start()
         time.sleep(200)
         threads.append(t1)
