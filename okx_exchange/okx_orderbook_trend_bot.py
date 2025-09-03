@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 import copy
 from collections import deque
@@ -14,10 +15,10 @@ from utils.logging_setup import setup_logger
 # -----------------------------
 WS_URL = "wss://wspap.okx.com:8443/ws/v5/public"
 
-DEPTH_LEVEL = 5
-WINDOW = 60
+DEPTH_LEVEL = 5  # 订单深度
+WINDOW = 60  # 成交流计算窗口（秒）
 VOLUME_SPIKE_FACTOR = 2.0
-ORDER_LIFETIME_MS = 3000
+ORDER_LIFETIME_MS = 3000  # 订单最小存活时间，防止频繁撤单
 MIN_VOL_SAMPLES = 20
 OFI_WINDOW_MS = 5000
 
@@ -199,6 +200,10 @@ class SymbolContext:
         # 综合分
         final = 0.4 * trend_score + 0.4 * orderbook_score + 0.2 * trade_score
         final_score = int((final + 1) * 50)  # [-1,1] -> [0,100]
+        logger.info(f"[{self.symbol}] "
+                    f"OBI: {obi:.3f}, TFI: {tfi:.3f}, Uptick: {uptick:.3f}, Sweep: {sweep}, OFI: {ofi:.3f}, "
+                    f"Refill: ({refill_bid:.3f},{refill_ask:.3f}), VolSpike: {vol_spike:.3f} | "
+                    f"Trend: {trend_score:.3f}, Orderbook: {orderbook_score:.3f}, Trade: {trade_score:.3f}, Final: {final_score}")
 
         return {
             "trend": round(trend_score, 3),
@@ -214,9 +219,10 @@ class SymbolContext:
 async def run_symbol(ws, symbol):
     ctx = SymbolContext(symbol)
 
-    async def callback(msg):
+    def callback0(msg):
         if "arg" not in msg:
             return
+        msg = json.loads(msg)
         ch = msg["arg"].get("channel", "")
         if ch.startswith("books") and "data" in msg:
             ctx.process_orderbook_delta(msg["data"][0])
@@ -228,7 +234,7 @@ async def run_symbol(ws, symbol):
         {"channel": "books5", "instId": symbol},
         {"channel": "trades", "instId": symbol}
     ]
-    await ws.subscribe(args, callback=callback)
+    await ws.subscribe(args, callback=callback0)
 
     while True:
         scores = ctx.compute_scores()
@@ -243,9 +249,11 @@ async def run_symbol(ws, symbol):
 
 
 async def main():
-    ws = WsPublicAsync(url=WS_URL)
-    await ws.start()
-    tasks = [asyncio.create_task(run_symbol(ws, sym)) for sym in TREND_SYMBOL_LIST]
+    tasks = []
+    for sym in TREND_SYMBOL_LIST:
+        ws = WsPublicAsync(url=WS_URL)
+        await ws.start()
+        tasks.append(asyncio.create_task(run_symbol(ws, sym)))
     await asyncio.gather(*tasks)
 
 
