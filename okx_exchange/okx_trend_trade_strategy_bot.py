@@ -263,6 +263,7 @@ if __name__ == "__main__":
         time.sleep(200)
         threads.append(t1)
         threads.append(t2)
+        threads.append(t3)
     for t in threads:
         t.join()
     # monitor_position_macd(direction_symbol=SYMBOL)
