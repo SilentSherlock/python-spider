@@ -201,7 +201,7 @@ def calculate_funding_rate_diff():
 
 # 在 OKX 上执行合约下单，待优化，设置止损
 def execute_okx_order_swap(symbol, side, qty, price, order_type="market",
-                           account_api=okx_account_api, trade_api=okx_trade_api):
+                           account_api=okx_account_api, trade_api=okx_trade_api, okx_leverage=MAX_LEVERAGE):
     if side not in ["long", "short"]:
         raise ValueError("OKX 下单方向必须是 'long' 或 'short'")
 
@@ -213,7 +213,7 @@ def execute_okx_order_swap(symbol, side, qty, price, order_type="market",
     leverage_result = account_api.set_leverage(
         instId=symbol,  # 交易对
         mgnMode="isolated",  # 逐仓模式
-        lever=str(MAX_LEVERAGE),  # 杠杆倍数
+        lever=str(okx_leverage),  # 杠杆倍数
         posSide=side
     )
     logger.info(f"[OKX] 设置账户模式和杠杆: {position_mode_result}, {leverage_result}")

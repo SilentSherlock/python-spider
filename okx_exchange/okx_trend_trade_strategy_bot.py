@@ -164,7 +164,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                             okx_result = execute_okx_order_swap(
                                 direction_symbol, direction, okx_qty, ticker_price,
                                 order_type="market", account_api=account_api,
-                                trade_api=trade_api, )
+                                trade_api=trade_api, okx_leverage=LEVERAGE)
                             break
                         except Exception as okx_e:
                             if attempt == 2:
