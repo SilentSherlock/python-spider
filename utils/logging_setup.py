@@ -17,7 +17,9 @@ def base_logger():
         datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler(os.path.join(LOG_DIR, "app.log"), encoding="utf-8")
+            logging.handlers.RotatingFileHandler(os.path.join(LOG_DIR, "app.log"), maxBytes=300 * 1024 * 1024,
+                                                 backupCount=7,
+                                                 encoding="utf-8")
         ]
     )
 
