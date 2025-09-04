@@ -5,7 +5,8 @@ import time
 from arbitrage_bot.backpack_okx_arbitrage_bot import SYMBOL_OKX_INSTRUMENT_MAP, calc_qty, execute_okx_order_swap, \
     close_okx_position_by_order_id
 from backpack_exchange.trade_prepare import proxy_on, okx_account_api_test, \
-    okx_trade_api_test, okx_market_api_test, okx_market_api, okx_account_api, okx_trade_api
+    okx_trade_api_test, okx_market_api_test, okx_market_api, okx_account_api, okx_trade_api, \
+    backpack_trade_cat_auto_client
 from okx_exchange.macd_signal import macd_signals, macd_signals_5m
 from utils.logging_setup import setup_logger, setup_okx_macd_logger
 
@@ -23,7 +24,6 @@ TREND_SYMBOL_LIST = [
     "XRP-USDT-SWAP",
 ]
 
-OKX_OPEN_INTERVAL_SEC = 5 * 60  # 每15分钟执行一次
 MARGIN = 50  # 保证金
 LEVERAGE = 15
 LOSS_LIMIT = 0.2  # 亏损20%止损
@@ -53,7 +53,8 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                           account_api=okx_account_api_test,
                           trade_api=okx_trade_api_test,
                           market_api=okx_market_api_test,
-                          k_rate=5):
+                          k_rate=5,
+                          backpack_client=backpack_trade_cat_auto_client):
     """
     计算指定交易对的最新MACD指标，进行开仓
     策略：
@@ -65,6 +66,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
     若开仓，进入持仓监控：
     * 进行关仓方向判断
     * 判断需要关单时，调用方法进行平仓
+    :param backpack_client: backpack交易客户端
     :param k_rate: 交易频率，单位分钟
     :param market_api:
     :param trade_api:
@@ -76,6 +78,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
     # 整15启动，以便获取完结的K线，同时尽可能避免数据损失
     # 延迟到最近的整15分钟再启动
     interval = k_rate
+    okx_open_interval_sec = k_rate * 60
     now = datetime.datetime.now()
     delay_minutes = (interval - now.minute % interval) % interval
     delay_seconds = (delay_minutes * 60 - now.second) + 10  # 多等40秒，确保K线完结
@@ -93,6 +96,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                                       limit=50)
             macd_signal = macd_signals_5m(klines)
 
+            # 计算信号
             macd_signal_target = {}
             for key in macd_signal.iloc[-1].keys():
                 v1 = macd_signal.iloc[-1][key]
@@ -131,6 +135,9 @@ def monitor_position_macd(direction_symbol=SYMBOL,
             short_signal_5 = macd_signal_target["ema_death_cross"] and short_signal_1 and (
                 not macd_signal_target["lines_converge"])
 
+            okx_ticker = market_api.get_ticker(instId=direction_symbol)
+            okx_price = float(
+                okx_ticker["data"][0]["last"]) if okx_ticker and "data" in okx_ticker else None
             if position is None:
                 logger.info("当前无持仓，进行开仓判断")
                 direction = None
@@ -150,14 +157,18 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                                                f"long_signal_5: {long_signal_5}, short_signal_2: {short_signal_2}, "
                                                f"short_signal_1: {short_signal_1}, short_signal_3: {short_signal_3}, "
                                                f"short_signal_4: {short_signal_4}, short_signal_5: {short_signal_5}")
-                    ticker_price = float(klines[0][4])  # 最新k线的收盘价
-                    # 计算开仓数量
+                    ticker_price = okx_price  # 最新k线的收盘价
+                    # 计算okx开仓数量
                     okx_ctval = float(SYMBOL_OKX_INSTRUMENT_MAP[direction_symbol]["ctVal"])  # 合约面值
                     okx_minsz = float(SYMBOL_OKX_INSTRUMENT_MAP[direction_symbol]["minsz"])  # 最小张数
                     raw_okx_qty = calc_qty(ticker_price, MARGIN, LEVERAGE, okx_ctval)
                     okx_qty = int(raw_okx_qty // okx_minsz) * okx_minsz
                     okx_qty = round(okx_qty, 4)
-                    # 执行开仓
+                    # 计算backpack开仓
+                    backpack_qty = round(okx_qty * okx_ctval, 4)
+                    backpack_price = round(ticker_price * (1 - 0.0001), 2)
+
+                    # 执行okx开仓
                     okx_result = {}
                     for attempt in range(3):
                         try:
@@ -170,6 +181,9 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                             if attempt == 2:
                                 raise
                             time.sleep(2)
+
+                    # 执行backpack开仓
+                    # todo
                     position = {
                         "okx_symbol": direction_symbol,
                         "okx_action": "open",
@@ -191,9 +205,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                         avg_px = float(order_info_data.get("avgPx", "0"))
                         position["okx_entry_price"] = avg_px if avg_px > 0 else position["okx_entry_price"]  # 更新为实际成交均价
                 if position["okx_entry_price"] is not None:
-                    okx_ticker = market_api.get_ticker(position["okx_symbol"])
-                    okx_price = float(
-                        okx_ticker["data"][0]["last"]) if okx_ticker and "data" in okx_ticker else None
+
                     if okx_price:
                         if position["okx_direction"] == "long":
                             change_pct = (okx_price - position["okx_entry_price"]) / position["okx_entry_price"]
@@ -239,7 +251,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
         except Exception as e:
             logger.error(f"异常: {e}")
 
-        time.sleep(OKX_OPEN_INTERVAL_SEC)
+        time.sleep(okx_open_interval_sec)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,7 @@
 import os
 
+from backpack_exchange_sdk.authenticated import AuthenticationClient
+from backpack_exchange_sdk.public import PublicClient
 from okx import Account, Trade, Funding, PublicData, MarketData
 
 
@@ -68,6 +70,12 @@ def load_backpack_api_keys_trade_cat_volume(
     return load_backpack_api_keys(path)
 
 
+# 从本地文件读取backpack API Key 和 Secret，合约自动化子账户
+def load_backpack_api_keys_trade_cat_auto(
+        path="C:\\Users\\15361\\OneDrive\\文档\\finance\\api\\backpack\\TradeCat-Auto.txt"):
+    return load_backpack_api_keys(path)
+
+
 # 从给定路径读取okx api key等参数
 def load_okx_api_keys_trade_cat_okx(path="C:\\Users\\15361\\OneDrive\\文档\\finance\\api\\okx\\TradeCat-OKX.txt"):
     return load_okx_api_keys(path)
@@ -84,7 +92,7 @@ def load_okx_api_keys_trade_cat_okx_trend(
         path="C:\\Users\\15361\\OneDrive\\文档\\finance\\api\\okx\\TradeCat-OKX-Trend-Strategy.txt"):
     return load_okx_api_keys(path)
 
-
+# okx api
 okx_live_trading = "0"
 okx_test_trading = "1"
 OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE = load_okx_api_keys_trade_cat_okx_trend()
@@ -95,6 +103,7 @@ okx_funding_api = Funding.FundingAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE
 okx_public_api = PublicData.PublicAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, False, okx_live_trading)
 okx_market_api = MarketData.MarketAPI(OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, False, okx_live_trading)
 
+# okx test api
 OKX_API_KEY_TEST, OKX_SECRET_KEY_TEST, OKX_PASSPHRASE_TEST = load_okx_api_keys_trade_cat_okx_test()
 okx_account_api_test = Account.AccountAPI(OKX_API_KEY_TEST, OKX_SECRET_KEY_TEST, OKX_PASSPHRASE_TEST, False,
                                           okx_test_trading)
@@ -103,3 +112,9 @@ okx_public_api_test = PublicData.PublicAPI(OKX_API_KEY_TEST, OKX_SECRET_KEY_TEST
                                            okx_test_trading)
 okx_market_api_test = MarketData.MarketAPI(OKX_API_KEY_TEST, OKX_SECRET_KEY_TEST, OKX_PASSPHRASE_TEST, False,
                                            okx_test_trading)
+
+# backpack trade cat auto api
+backpack_public_api = PublicClient()
+backpack_trade_cat_auto_api, backpack_trade_cat_auto_secret = load_backpack_api_keys_trade_cat_auto()
+backpack_trade_cat_auto_client = AuthenticationClient(backpack_trade_cat_auto_api, backpack_trade_cat_auto_secret)
+
