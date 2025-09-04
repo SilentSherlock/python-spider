@@ -233,6 +233,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                             change_pct = (position["okx_entry_price"] - okx_price) / position["okx_entry_price"]
                         else:
                             change_pct = 0
+                        change_pct *= LEVERAGE
                         logger.info(f"持仓中，当前价格: {okx_price}, 开仓均价: {position['okx_entry_price']}, "
                                     f"浮动盈亏: {change_pct:.4%}")
                         okx_trade_macd_logger.info(
