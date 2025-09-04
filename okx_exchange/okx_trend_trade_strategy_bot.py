@@ -2,8 +2,10 @@ import datetime
 import threading
 import time
 
+from enums.RequestEnums import OrderType
+
 from arbitrage_bot.backpack_okx_arbitrage_bot import SYMBOL_OKX_INSTRUMENT_MAP, calc_qty, execute_okx_order_swap, \
-    close_okx_position_by_order_id
+    close_okx_position_by_order_id, execute_backpack_order, close_backpack_position_by_order_id, SYMBOL_MAP
 from backpack_exchange.trade_prepare import proxy_on, okx_account_api_test, \
     okx_trade_api_test, okx_market_api_test, okx_market_api, okx_account_api, okx_trade_api, \
     backpack_trade_cat_auto_client
@@ -24,7 +26,7 @@ TREND_SYMBOL_LIST = [
     "XRP-USDT-SWAP",
 ]
 
-MARGIN = 50  # 保证金
+MARGIN = 10  # 保证金
 LEVERAGE = 15
 LOSS_LIMIT = 0.2  # 亏损20%止损
 PROFIT_DRAWBACK = 0.2  # 盈利回撤20%止盈保护
@@ -54,6 +56,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                           trade_api=okx_trade_api_test,
                           market_api=okx_market_api_test,
                           k_rate=5,
+                          backpack_direction_symbol="SOL_USDC_PERP",
                           backpack_client=backpack_trade_cat_auto_client):
     """
     计算指定交易对的最新MACD指标，进行开仓
@@ -66,6 +69,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
     若开仓，进入持仓监控：
     * 进行关仓方向判断
     * 判断需要关单时，调用方法进行平仓
+    :param backpack_direction_symbol:
     :param backpack_client: backpack交易客户端
     :param k_rate: 交易频率，单位分钟
     :param market_api:
@@ -183,7 +187,19 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                             time.sleep(2)
 
                     # 执行backpack开仓
-                    # todo
+                    backpack_result = {}
+                    for bp_attempt in range(3):
+                        try:
+                            backpack_result = execute_backpack_order(backpack_direction_symbol,
+                                                                     direction, backpack_qty,
+                                                                     str(backpack_price),
+                                                                     order_type=OrderType.MARKET, leverage=LEVERAGE)
+                            break
+                        except Exception as bp_e:
+                            logger.info(f"[异常] Backpack下单失败, 第{bp_attempt + 1}次重试: {bp_e}")
+                            if bp_attempt == 2:
+                                raise
+                            time.sleep(2)
                     position = {
                         "okx_symbol": direction_symbol,
                         "okx_action": "open",
@@ -192,6 +208,9 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                         "okx_qty": okx_qty,
                         "okx_direction": direction,
                         "okx_entry_price": None,  # 开仓均价，后续更新
+                        "backpack_qty": backpack_qty,
+                        "backpack_order_id": backpack_result.get("id"),
+                        "backpack_symbol": backpack_direction_symbol,
                     }
                     logger.info(f"开仓: 订单ID: {position['okx_order_id']}, 方向: {direction}, 数量: {okx_qty}, ")
             else:
@@ -238,6 +257,10 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                                                    order_id=position["okx_order_id"],
                                                    okx_qty=position["okx_qty"],
                                                    trade_api=trade_api)
+                    close_backpack_position_by_order_id(symbol=position["backpack_symbol"],
+                                                        order_id=position["backpack_order_id"],
+                                                        backpack_qty=position["backpack_qty"],)
+
                     position = None
                     logger.info("平仓完成，等待下一次开仓信号")
                     okx_trade_macd_logger.info("平仓macd_signal: " + str(macd_signal_target))
@@ -256,26 +279,27 @@ def monitor_position_macd(direction_symbol=SYMBOL,
 
 if __name__ == "__main__":
     threads = []
-    for SYMBOL in TREND_SYMBOL_LIST:
-        t1 = threading.Thread(target=monitor_position_macd,
-                              args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api, 5),
-                              name=f"Thread-{SYMBOL}-Test-5m")
-        # t = threading.Thread(target=monitor_position_macd,
-        #                      args=(SYMBOL, okx_account_api, okx_trade_api, okx_market_api),
-        #                      name=f"Thread-{SYMBOL}")
-        t1.start()
-        t2 = threading.Thread(target=monitor_position_macd,
-                              args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api, 15),
-                              name=f"Thread-{SYMBOL}-Test-15m")
-        t2.start()
-        t3 = threading.Thread(target=monitor_position_macd,
-                              args=(SYMBOL, okx_account_api_test, okx_trade_api_test, okx_market_api, 1),
-                              name=f"Thread-{SYMBOL}-Test-1m")
-        t3.start()
+    for okx_symbol, backpack_symbol in SYMBOL_MAP.items():
+        okt5 = threading.Thread(target=monitor_position_macd,
+                                args=(okx_symbol, okx_account_api_test, okx_trade_api_test, okx_market_api, 5,
+                                      backpack_symbol),
+                                name=f"Thread-{okx_symbol}-Test-5m")
+
+        okt5.start()
+        okt15 = threading.Thread(target=monitor_position_macd,
+                                 args=(okx_symbol, okx_account_api_test, okx_trade_api_test, okx_market_api, 15,
+                                       backpack_symbol),
+                                 name=f"Thread-{okx_symbol}-Test-15m")
+        okt15.start()
+        okt1 = threading.Thread(target=monitor_position_macd,
+                                args=(okx_symbol, okx_account_api_test, okx_trade_api_test, okx_market_api, 1,
+                                      backpack_symbol),
+                                name=f"Thread-{okx_symbol}-Test-1m")
+        okt1.start()
         time.sleep(200)
-        threads.append(t1)
-        threads.append(t2)
-        threads.append(t3)
+        threads.append(okt5)
+        threads.append(okt15)
+        threads.append(okt1)
     for t in threads:
         t.join()
     # monitor_position_macd(direction_symbol=SYMBOL)
