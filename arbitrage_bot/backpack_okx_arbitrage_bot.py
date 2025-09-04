@@ -17,7 +17,7 @@ proxy_on()  # 启用代理（如果需要）
 OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE = load_okx_api_keys_trade_cat_okx()
 BACKPACK_API_KEY, BACKPACK_SECRET_KEY = load_backpack_api_keys_trade_cat_funding()
 
-backpack_client = AuthenticationClient(BACKPACK_API_KEY, BACKPACK_SECRET_KEY)
+backpack_funding_client = AuthenticationClient(BACKPACK_API_KEY, BACKPACK_SECRET_KEY)
 backpack_public = PublicClient()
 okx_live_trading = "0"
 okx_account_api = Account.AccountAPI(
@@ -307,7 +307,7 @@ def close_okx_position_by_order_id(symbol, order_id, okx_qty, trade_api=okx_trad
 
 
 # 在backpack 上执行合约下单，待优化，设置止损
-def execute_backpack_order(symbol, side, qty, price, order_type=OrderType.MARKET, leverage=MAX_LEVERAGE):
+def execute_backpack_order(symbol, side, qty, price, order_type=OrderType.MARKET, leverage=MAX_LEVERAGE, backpack_client=backpack_funding_client):
     if side not in ["long", "short"]:
         raise ValueError("Backpack 下单方向必须是 'long' 或 'short'")
     # 设置合约交易参数
@@ -348,7 +348,7 @@ def check_backpack_order_filled(symbol, order_id, max_attempts=30, interval=1):
     :return: True-已成交，False-未成交已取消
     """
     for attempt in range(max_attempts):
-        fill_order = backpack_client.get_fill_history(symbol=symbol, orderId=order_id)
+        fill_order = backpack_funding_client.get_fill_history(symbol=symbol, orderId=order_id)
         if not fill_order or "error" in fill_order:
             logger.info(f"查询Backpack订单失败: {fill_order.get('error', '未知错误') if fill_order else '无返回'}")
             break
@@ -357,14 +357,15 @@ def check_backpack_order_filled(symbol, order_id, max_attempts=30, interval=1):
             return True
         time.sleep(interval)
     logger.info(f"订单{order_id}未成交，准备取消")
-    backpack_client.cancel_open_order(symbol=symbol, orderId=order_id)
+    backpack_funding_client.cancel_open_order(symbol=symbol, orderId=order_id)
     return False
 
 
 # 在backpack 上进行合约平仓（通过订单ID反向下单）,开仓后才可平仓，合约挂单未成交不算平仓
-def close_backpack_position_by_order_id(symbol, order_id, backpack_qty=None):
+def close_backpack_position_by_order_id(symbol, order_id, backpack_qty=None, backpack_client=backpack_funding_client):
     """
     根据订单ID平仓：查询订单，获取参数，反向下单
+    :param backpack_client:
     :param backpack_qty:
     :param symbol:
     :param order_id: 需平仓的订单ID
@@ -494,11 +495,11 @@ def arbitrage_loop():
                                 logger.info(f"[异常] 取消OKX开单失败: {cancel_okx_e}")
                             # 取消Backpack当前标的所有开单
                             try:
-                                open_orders = backpack_client.get_users_open_orders(symbol=r["backpack_symbol"])
+                                open_orders = backpack_funding_client.get_users_open_orders(symbol=r["backpack_symbol"])
                                 if open_orders and isinstance(open_orders, list):
                                     for order in open_orders:
-                                        backpack_client.cancel_open_order(symbol=r["backpack_symbol"],
-                                                                          orderId=order["id"])
+                                        backpack_funding_client.cancel_open_order(symbol=r["backpack_symbol"],
+                                                                                  orderId=order["id"])
                             except Exception as cancel_bp_e:
                                 logger.info(f"[异常] 取消Backpack开单失败: {cancel_bp_e}")
                             # 重试开仓

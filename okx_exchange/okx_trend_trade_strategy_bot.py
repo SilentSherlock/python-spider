@@ -193,7 +193,8 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                             backpack_result = execute_backpack_order(backpack_direction_symbol,
                                                                      direction, backpack_qty,
                                                                      str(backpack_price),
-                                                                     order_type=OrderType.MARKET, leverage=LEVERAGE)
+                                                                     order_type=OrderType.MARKET, leverage=LEVERAGE,
+                                                                     backpack_client=backpack_trade_cat_auto_client)
                             break
                         except Exception as bp_e:
                             logger.info(f"[异常] Backpack下单失败, 第{bp_attempt + 1}次重试: {bp_e}")
@@ -259,7 +260,8 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                                                    trade_api=trade_api)
                     close_backpack_position_by_order_id(symbol=position["backpack_symbol"],
                                                         order_id=position["backpack_order_id"],
-                                                        backpack_qty=position["backpack_qty"],)
+                                                        backpack_qty=position["backpack_qty"],
+                                                        backpack_client=backpack_trade_cat_auto_client)
 
                     position = None
                     logger.info("平仓完成，等待下一次开仓信号")
