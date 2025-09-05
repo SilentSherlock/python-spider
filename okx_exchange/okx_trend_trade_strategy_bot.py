@@ -183,7 +183,8 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                             break
                         except Exception as okx_e:
                             if attempt == 2:
-                                raise
+                                # raise
+                                logger.error(f"[异常] OKX下单失败, 第{attempt + 1}次重试: {okx_e}, 放弃本次开仓")
                             time.sleep(2)
 
                     # 执行backpack开仓
