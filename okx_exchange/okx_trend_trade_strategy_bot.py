@@ -30,8 +30,8 @@ MARGIN = 10  # 保证金
 LEVERAGE = 15
 LOSS_LIMIT = 0.2  # 亏损20%止损
 PROFIT_DRAWBACK = 0.2  # 盈利回撤20%止盈保护
-WIN_LIMIT_5k = 0.05 # 盈利5%止盈
-WIN_LIMIT_1k = 0.01 # 盈利1%止盈
+WIN_LIMIT_5k = 0.05  # 盈利5%止盈
+WIN_LIMIT_1k = 0.01  # 盈利1%止盈
 
 
 def fetch_kline_data(market_api=okx_market_api_test, kline_symbol=SYMBOL, interval="5m", limit=30):
@@ -171,7 +171,8 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                     okx_qty = round(okx_qty, 4)
                     # 计算backpack开仓
                     backpack_qty = round(okx_qty * okx_ctval, 4)
-                    backpack_price = round(ticker_price * (1 - 0.0001), 2)
+                    backpack_price = round(ticker_price * (1 - 0.0001), 2) if direction == "long" \
+                        else round(ticker_price * (1 + 0.0001), 2)
 
                     # 执行okx开仓
                     okx_result = {}
@@ -195,7 +196,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                             backpack_result = execute_backpack_order(backpack_direction_symbol,
                                                                      direction, backpack_qty,
                                                                      str(backpack_price),
-                                                                     order_type=OrderType.MARKET, leverage=LEVERAGE,
+                                                                     order_type=OrderType.LIMIT, leverage=LEVERAGE,
                                                                      backpack_client=backpack_trade_cat_auto_client)
                             break
                         except Exception as bp_e:
@@ -245,7 +246,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                         # 检测止盈线
                         if ((change_pct >= WIN_LIMIT_5k and k_rate == 5) or
                                 (change_pct >= WIN_LIMIT_1k and k_rate == 1)):
-                            logger.info(f"触发止盈条件，准备平仓")
+                            okx_trade_macd_logger.info(f"触发止盈条件，准备平仓")
                             close_flag = True
 
                 if "long" == position.get("okx_direction"):
