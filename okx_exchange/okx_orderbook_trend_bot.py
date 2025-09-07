@@ -22,8 +22,8 @@ ORDER_LIFETIME_MS = 3000  # 订单最小存活时间，防止频繁撤单
 MIN_VOL_SAMPLES = 20
 OFI_WINDOW_MS = 5000
 
-logger = setup_logger("okx_strategy_trend")
-signal_logger = setup_logger("okx_strategy_trend_signals")
+logger = setup_logger("okx_orderbook_trend")
+signal_logger = setup_logger("okx_orderbook_trend_signals")
 
 
 def now_ms():
