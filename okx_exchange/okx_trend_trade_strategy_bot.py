@@ -196,7 +196,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                             backpack_result = execute_backpack_order(backpack_direction_symbol,
                                                                      direction, backpack_qty,
                                                                      str(backpack_price),
-                                                                     order_type=OrderType.LIMIT, leverage=LEVERAGE,
+                                                                     order_type=OrderType.MARKET, leverage=LEVERAGE,
                                                                      backpack_client=backpack_trade_cat_auto_client)
                             break
                         except Exception as bp_e:
