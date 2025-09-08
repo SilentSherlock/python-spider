@@ -28,10 +28,10 @@ TREND_SYMBOL_LIST = [
 
 MARGIN = 10  # 保证金
 LEVERAGE = 15
-LOSS_LIMIT = 0.2  # 亏损20%止损
+LOSS_LIMIT = 0.01  # 亏损1%止损
 PROFIT_DRAWBACK = 0.2  # 盈利回撤20%止盈保护
-WIN_LIMIT_5k = 0.05  # 盈利5%止盈
-WIN_LIMIT_1k = 0.01  # 盈利1%止盈
+WIN_LIMIT_5k = 0.07  # 盈利5%止盈
+WIN_LIMIT_1k = 0.03  # 盈利3%止盈
 
 
 def fetch_kline_data(market_api=okx_market_api_test, kline_symbol=SYMBOL, interval="5m", limit=30):
@@ -247,6 +247,11 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                         if ((change_pct >= WIN_LIMIT_5k and k_rate == 5) or
                                 (change_pct >= WIN_LIMIT_1k and k_rate == 1)):
                             okx_trade_macd_logger.info(f"触发止盈条件，准备平仓")
+                            close_flag = True
+
+                        # 检测止损线
+                        if change_pct <= -LOSS_LIMIT:
+                            okx_trade_macd_logger.info(f"触发止损条件，准备平仓")
                             close_flag = True
 
                 if "long" == position.get("okx_direction"):
