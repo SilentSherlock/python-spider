@@ -322,11 +322,14 @@ class SymbolContext:
         """
         综合计算各类指标，输出最终信号分数
         """
+        logger.info(f"Computing scores...:-)")
         if not self.orderbook_snapshot or len(self.trades_buffer) < MIN_VOL_SAMPLES:
             return None
         wb, wa, depth = self.get_depth_stats()
         if depth < DEPTH_MIN:
-            return {"final": 50, "note": "shallow_depth"}
+            logger.info(f"{self.symbol} Depth too shallow, skipping signal. wb: {wb} wa: {wa} "
+                        f"Depth: {depth:.1f}")
+            return None
         tfi = self.compute_tfi()
         uptick = 2 * (self.compute_uptick_ratio() - 0.5)
         sweep = self.detect_sweep()
@@ -405,7 +408,7 @@ async def run_symbol(ws, symbol):
                 ctx.process_trade_entry(t)
 
     args = [
-        {"channel": "books10", "instId": symbol},
+        {"channel": "books", "instId": symbol},
         {"channel": "trades", "instId": symbol}
     ]
     await ws.subscribe(args, callback=callback0)
@@ -420,6 +423,8 @@ async def run_symbol(ws, symbol):
                 gate = scores["gate"]
                 action = "HOLD"
                 # 多空信号判定与持仓切换
+                logger.info(f"Position bias: {ctx.position_bias}, Gate: {gate}, Score: {f}"
+                            f", Last signal at: {ctx.last_signal_ms} ms, now {now} ms, cooldown {COOLDOWN_MS} ms")
                 if ctx.position_bias >= 0 and gate >= 0:
                     if f >= ENTER_LONG and (now - ctx.last_signal_ms) >= COOLDOWN_MS:
                         if ctx.position_bias <= 0:
