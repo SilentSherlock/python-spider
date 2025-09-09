@@ -27,11 +27,11 @@ TREND_SYMBOL_LIST = [
 ]
 
 MARGIN = 10  # 保证金
-LEVERAGE = 15
+LEVERAGE = 50
 LOSS_LIMIT = 0.01  # 亏损1%止损
 PROFIT_DRAWBACK = 0.2  # 盈利回撤20%止盈保护
-WIN_LIMIT_5k = 0.07  # 盈利5%止盈
-WIN_LIMIT_1k = 0.03  # 盈利3%止盈
+WIN_LIMIT_5k = 0.5  # 盈利5%止盈
+WIN_LIMIT_1k = 0.2  # 盈利3%止盈
 
 
 def fetch_kline_data(market_api=okx_market_api_test, kline_symbol=SYMBOL, interval="5m", limit=30):
