@@ -76,6 +76,12 @@ def load_backpack_api_keys_trade_cat_auto(
     return load_backpack_api_keys(path)
 
 
+# 从本地文件读取backpack API Key 和 Secret，TradeDog-Auto子账户
+def load_backpack_api_keys_trade_dog_auto(
+        path="C:\\Users\\15361\\OneDrive\\文档\\finance\\api\\backpack\\TradeDog-Auto.txt"):
+    return load_backpack_api_keys(path)
+
+
 # 从给定路径读取okx api key等参数
 def load_okx_api_keys_trade_cat_okx(path="C:\\Users\\15361\\OneDrive\\文档\\finance\\api\\okx\\TradeCat-OKX.txt"):
     return load_okx_api_keys(path)
@@ -91,6 +97,7 @@ def load_okx_api_keys_trade_cat_okx_test(
 def load_okx_api_keys_trade_cat_okx_trend(
         path="C:\\Users\\15361\\OneDrive\\文档\\finance\\api\\okx\\TradeCat-OKX-Trend-Strategy.txt"):
     return load_okx_api_keys(path)
+
 
 # okx api
 okx_live_trading = "0"
@@ -117,4 +124,5 @@ okx_market_api_test = MarketData.MarketAPI(OKX_API_KEY_TEST, OKX_SECRET_KEY_TEST
 backpack_public_api = PublicClient()
 backpack_trade_cat_auto_api, backpack_trade_cat_auto_secret = load_backpack_api_keys_trade_cat_auto()
 backpack_trade_cat_auto_client = AuthenticationClient(backpack_trade_cat_auto_api, backpack_trade_cat_auto_secret)
-
+backpack_trade_dog_auto_api, backpack_trade_dog_auto_secret = load_backpack_api_keys_trade_dog_auto()
+backpack_trade_dog_auto_client = AuthenticationClient(backpack_trade_dog_auto_api, backpack_trade_dog_auto_secret)

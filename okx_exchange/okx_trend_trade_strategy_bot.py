@@ -8,7 +8,7 @@ from arbitrage_bot.backpack_okx_arbitrage_bot import SYMBOL_OKX_INSTRUMENT_MAP, 
     close_okx_position_by_order_id, execute_backpack_order, close_backpack_position_by_order_id, SYMBOL_MAP
 from backpack_exchange.trade_prepare import proxy_on, okx_account_api_test, \
     okx_trade_api_test, okx_market_api_test, okx_market_api, okx_account_api, okx_trade_api, \
-    backpack_trade_cat_auto_client
+    backpack_trade_cat_auto_client, backpack_trade_dog_auto_client
 from okx_exchange.macd_signal import macd_signals, macd_signals_5m
 from utils.logging_setup import setup_logger, setup_okx_macd_logger
 
@@ -190,14 +190,22 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                             time.sleep(2)
 
                     # 执行backpack开仓
-                    backpack_result = {}
+                    backpack_trade_cat_auto_result = {}
+                    backpack_trade_dog_auto_result = {}
                     for bp_attempt in range(3):
                         try:
-                            backpack_result = execute_backpack_order(backpack_direction_symbol,
-                                                                     direction, backpack_qty,
-                                                                     str(backpack_price),
-                                                                     order_type=OrderType.MARKET, leverage=LEVERAGE,
-                                                                     backpack_client=backpack_trade_cat_auto_client)
+                            backpack_trade_cat_auto_result = execute_backpack_order(backpack_direction_symbol,
+                                                                                    direction, backpack_qty,
+                                                                                    str(backpack_price),
+                                                                                    order_type=OrderType.MARKET,
+                                                                                    leverage=LEVERAGE,
+                                                                                    backpack_client=backpack_trade_cat_auto_client)
+                            backpack_trade_dog_auto_result = execute_backpack_order(backpack_direction_symbol,
+                                                                                    direction, backpack_qty,
+                                                                                    str(backpack_price),
+                                                                                    order_type=OrderType.MARKET,
+                                                                                    leverage=LEVERAGE,
+                                                                                    backpack_client=backpack_trade_dog_auto_client)
                             break
                         except Exception as bp_e:
                             logger.info(f"[异常] Backpack下单失败, 第{bp_attempt + 1}次重试: {bp_e}")
@@ -213,8 +221,9 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                         "okx_direction": direction,
                         "okx_entry_price": None,  # 开仓均价，后续更新
                         "backpack_qty": backpack_qty,
-                        "backpack_order_id": backpack_result.get("id"),
+                        "backpack_trade_cat_auto_order_id": backpack_trade_cat_auto_result.get("id"),
                         "backpack_symbol": backpack_direction_symbol,
+                        "backpack_trade_dog_auto_order_id": backpack_trade_dog_auto_result.get("id"),
                     }
                     okx_trade_macd_logger.info(f"开仓信息: {position}")
             else:
@@ -269,9 +278,13 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                                                    okx_qty=position["okx_qty"],
                                                    trade_api=trade_api)
                     close_backpack_position_by_order_id(symbol=position["backpack_symbol"],
-                                                        order_id=position["backpack_order_id"],
+                                                        order_id=position["backpack_trade_cat_auto_order_id"],
                                                         backpack_qty=position["backpack_qty"],
                                                         backpack_client=backpack_trade_cat_auto_client)
+                    close_backpack_position_by_order_id(symbol=position["backpack_symbol"],
+                                                        order_id=position["backpack_trade_dog_auto_order_id"],
+                                                        backpack_qty=position["backpack_qty"],
+                                                        backpack_client=backpack_trade_dog_auto_client)
 
                     position = None
                     logger.info("平仓完成，等待下一次开仓信号")
