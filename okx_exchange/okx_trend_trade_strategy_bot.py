@@ -262,7 +262,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                         if change_pct <= -LOSS_LIMIT:
                             okx_trade_macd_logger.info(f"触发止损条件，准备平仓")
                             close_flag = True
-
+                # 信号判断平仓
                 if "long" == position.get("okx_direction"):
                     if (short_signal_2 or short_signal_1 or short_signal_3 or short_signal_4 or short_signal_5
                             or macd_signal_target["zero_down"] or macd_signal_target["death_cross"]):
@@ -271,6 +271,9 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                     if long_signal_2 or long_signal_1 or long_signal_3 or long_signal_4 or long_signal_5 \
                             or macd_signal_target["zero_up"] or macd_signal_target["golden_cross"]:
                         close_flag = True
+
+                # 利润回撤保护
+                # todo 折半止盈法，待完善
 
                 if close_flag:
                     close_okx_position_by_order_id(symbol=position["okx_symbol"],
