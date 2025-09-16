@@ -251,6 +251,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                         okx_trade_macd_logger.info(
                             f"持仓中，当前价格: {okx_price}, 开仓均价: {position['okx_entry_price']}, "
                             f"浮动盈亏: {change_pct:.4%}, 方向{position['okx_direction']}, ")
+                        position["change_pct"] = change_pct
 
                         # 检测止盈线
                         if ((change_pct >= WIN_LIMIT_5k and k_rate == 5) or
@@ -273,7 +274,15 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                         close_flag = True
 
                 # 利润回撤保护
-                # todo 折半止盈法，待完善
+                # 记录折半止盈点
+                if position.get("half_take_profit") is None and position.get("change_pct") > 0.02:
+                    position["half_take_profit"] = position.get("change_pct") * 0.5
+
+                # 如果利润回撤到折半止盈点，触发平仓
+                if (position.get("half_take_profit") is not None and
+                        position.get("change_pct") <= position["half_take_profit"]):
+                    okx_trade_macd_logger.info(f"触发折半止盈回撤，准备平仓")
+                    close_flag = True
 
                 if close_flag:
                     close_okx_position_by_order_id(symbol=position["okx_symbol"],
