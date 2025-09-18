@@ -26,7 +26,7 @@ TREND_SYMBOL_LIST = [
     "XRP-USDT-SWAP",
 ]
 
-MARGIN = 10  # 保证金
+MARGIN = 30  # 保证金
 LEVERAGE = 50
 LOSS_LIMIT = 0.01  # 亏损1%止损
 PROFIT_DRAWBACK = 0.2  # 盈利回撤20%止盈保护
