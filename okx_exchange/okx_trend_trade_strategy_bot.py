@@ -220,6 +220,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                         "okx_qty": okx_qty,
                         "okx_direction": direction,
                         "okx_entry_price": None,  # 开仓均价，后续更新
+                        "backpack_entry_price": None,  # backpack开仓均价，后续更新
                         "backpack_qty": backpack_qty,
                         "backpack_trade_cat_auto_order_id": backpack_trade_cat_auto_result.get("id"),
                         "backpack_symbol": backpack_direction_symbol,
@@ -230,26 +231,36 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                 close_flag = False
 
                 # 已持仓，计算大概盈亏
-                if position["okx_entry_price"] is None:
+                if position["okx_entry_price"] is None and position["backpack_entry_price"] is None:
+                    # okx 价格作为准入价格
                     order_info = trade_api.get_order(instId=position["okx_symbol"], ordId=position["okx_order_id"])
                     if order_info.get("code") == "0" and order_info.get("data"):
                         order_info_data = order_info["data"][0]
                         avg_px = float(order_info_data.get("avgPx", "0"))
                         position["okx_entry_price"] = avg_px if avg_px > 0 else position["okx_entry_price"]  # 更新为实际成交均价
-                if position["okx_entry_price"] is not None:
+                    # backpack 价格作为准入价格 taker交易 maker交易可能还未成交
+                    backpack_fills = backpack_client.get_fill_history(
+                        orderId=position["backpack_trade_cat_auto_order_id"], symbol=position["backpack_symbol"])
+                    if backpack_fills and len(backpack_fills) > 0 and "price" in backpack_fills[0]:
+                        fill_price = float(backpack_fills[0]["price"])
+                        position["backpack_entry_price"] = fill_price if fill_price > 0 else None
+
+                if position["okx_entry_price"] is not None and position["backpack_entry_price"] is not None:
 
                     if okx_price:
+                        # entry_price = (position["okx_entry_price"] + position["backpack_entry_price"]) / 2
+                        entry_price = position["backpack_entry_price"]
                         if position["okx_direction"] == "long":
-                            change_pct = (okx_price - position["okx_entry_price"]) / position["okx_entry_price"]
+                            change_pct = (okx_price - entry_price) / entry_price
                         elif position["okx_direction"] == "short":
-                            change_pct = (position["okx_entry_price"] - okx_price) / position["okx_entry_price"]
+                            change_pct = (entry_price - okx_price) / entry_price
                         else:
                             change_pct = 0
                         change_pct *= LEVERAGE
-                        logger.info(f"持仓中，当前价格: {okx_price}, 开仓均价: {position['okx_entry_price']}, "
+                        logger.info(f"持仓中，当前价格: {okx_price}, 开仓均价: {entry_price}, "
                                     f"浮动盈亏: {change_pct:.4%}")
                         okx_trade_macd_logger.info(
-                            f"持仓中，当前价格: {okx_price}, 开仓均价: {position['okx_entry_price']}, "
+                            f"持仓中，当前价格: {okx_price}, 开仓均价: {entry_price}, "
                             f"浮动盈亏: {change_pct:.4%}, 方向{position['okx_direction']}, ")
                         position["change_pct"] = change_pct
 
