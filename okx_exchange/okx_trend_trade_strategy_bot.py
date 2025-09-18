@@ -267,10 +267,12 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                 if "long" == position.get("okx_direction"):
                     if (short_signal_2 or short_signal_1 or short_signal_3 or short_signal_4 or short_signal_5
                             or macd_signal_target["zero_down"] or macd_signal_target["death_cross"]):
+                        okx_trade_macd_logger.info(f"做多触发空头信号条件，准备平仓")
                         close_flag = True
                 elif "short" == position.get("okx_direction"):
                     if long_signal_2 or long_signal_1 or long_signal_3 or long_signal_4 or long_signal_5 \
                             or macd_signal_target["zero_up"] or macd_signal_target["golden_cross"]:
+                        okx_trade_macd_logger.info(f"做空触发多头信号条件，准备平仓")
                         close_flag = True
 
                 # 利润回撤保护
