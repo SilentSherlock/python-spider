@@ -26,7 +26,7 @@ TREND_SYMBOL_LIST = [
     "XRP-USDT-SWAP",
 ]
 
-MARGIN = 30  # 保证金
+MARGIN = 10  # 保证金
 LEVERAGE = 50
 LOSS_LIMIT = 0.01  # 亏损1%止损
 PROFIT_DRAWBACK = 0.2  # 盈利回撤20%止盈保护
@@ -73,7 +73,7 @@ def monitor_position_macd(direction_symbol=SYMBOL,
     :param backpack_direction_symbol:
     :param backpack_client: backpack交易客户端
     :param k_rate: 交易频率，单位分钟
-    :param market_api:
+    :param market_api
     :param trade_api:
     :param account_api:
     :param direction_symbol:
@@ -194,12 +194,12 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                     backpack_trade_dog_auto_result = {}
                     for bp_attempt in range(3):
                         try:
-                            backpack_trade_cat_auto_result = execute_backpack_order(backpack_direction_symbol,
-                                                                                    direction, backpack_qty,
-                                                                                    str(backpack_price),
-                                                                                    order_type=OrderType.MARKET,
-                                                                                    leverage=LEVERAGE,
-                                                                                    backpack_client=backpack_trade_cat_auto_client)
+                            # backpack_trade_cat_auto_result = execute_backpack_order(backpack_direction_symbol,
+                            #                                                         direction, backpack_qty,
+                            #                                                         str(backpack_price),
+                            #                                                         order_type=OrderType.MARKET,
+                            #                                                         leverage=LEVERAGE,
+                            #                                                         backpack_client=backpack_trade_cat_auto_client)
                             backpack_trade_dog_auto_result = execute_backpack_order(backpack_direction_symbol,
                                                                                     direction, backpack_qty,
                                                                                     str(backpack_price),
@@ -298,18 +298,29 @@ def monitor_position_macd(direction_symbol=SYMBOL,
                     close_flag = True
 
                 if close_flag:
-                    close_okx_position_by_order_id(symbol=position["okx_symbol"],
-                                                   order_id=position["okx_order_id"],
-                                                   okx_qty=position["okx_qty"],
-                                                   trade_api=trade_api)
-                    close_backpack_position_by_order_id(symbol=position["backpack_symbol"],
-                                                        order_id=position["backpack_trade_cat_auto_order_id"],
-                                                        backpack_qty=position["backpack_qty"],
-                                                        backpack_client=backpack_trade_cat_auto_client)
-                    close_backpack_position_by_order_id(symbol=position["backpack_symbol"],
-                                                        order_id=position["backpack_trade_dog_auto_order_id"],
-                                                        backpack_qty=position["backpack_qty"],
-                                                        backpack_client=backpack_trade_dog_auto_client)
+                    try:
+                        close_okx_position_by_order_id(symbol=position["okx_symbol"],
+                                                       order_id=position["okx_order_id"],
+                                                       okx_qty=position["okx_qty"],
+                                                       trade_api=trade_api)
+                    except Exception as e:
+                        logger.error(f"OKX平仓异常: {e}, 请手动检查是否需要平仓")
+                    # try:
+                    #
+                    #     close_backpack_position_by_order_id(symbol=position["backpack_symbol"],
+                    #                                         order_id=position["backpack_trade_cat_auto_order_id"],
+                    #                                         backpack_qty=position["backpack_qty"],
+                    #                                         backpack_client=backpack_trade_cat_auto_client)
+                    # except Exception as e:
+                    #     logger.error(f"Backpack TradeCat平仓异常: {e}, 请手动检查是否需要平仓")
+                    try:
+
+                        close_backpack_position_by_order_id(symbol=position["backpack_symbol"],
+                                                            order_id=position["backpack_trade_dog_auto_order_id"],
+                                                            backpack_qty=position["backpack_qty"],
+                                                            backpack_client=backpack_trade_dog_auto_client)
+                    except Exception as e:
+                        logger.error(f"Backpack TradeDog平仓异常: {e}, 请手动检查是否需要平仓")
 
                     position = None
                     logger.info("平仓完成，等待下一次开仓信号")
